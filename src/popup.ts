@@ -1,5 +1,5 @@
 import type { OcrStatus } from './ocr/types';
-import type { TranslationStatus } from './translation/types';
+import type { TranslationProviderId, TranslationStatus } from './translation/types';
 
 (() => {
   const button = document.querySelector<HTMLButtonElement>('#scan-images');
@@ -32,8 +32,9 @@ import type { TranslationStatus } from './translation/types';
   const detect = document.querySelector<HTMLButtonElement>('#detect-text');
   const ocrResult = document.querySelector<HTMLParagraphElement>('#ocr-result');
   const translate = document.querySelector<HTMLButtonElement>('#translate-text');
+  const engine = document.querySelector<HTMLSelectElement>('#translation-engine');
   const translationResult = document.querySelector<HTMLParagraphElement>('#translation-result');
-  if (!detect || !ocrResult || !translate || !translationResult) return;
+  if (!detect || !ocrResult || !translate || !engine || !translationResult) return;
   let tabId: number | undefined;
   let polling = false;
   let starting = false;
@@ -97,7 +98,8 @@ import type { TranslationStatus } from './translation/types';
     updateControls();
     translationResult.textContent = 'Starting translation…';
     try {
-      renderTranslation(await chrome.tabs.sendMessage(tabId, { type: 'START_TRANSLATION' }, { frameId: 0 }));
+      const provider = engine.value as TranslationProviderId;
+      renderTranslation(await chrome.tabs.sendMessage(tabId, { type: 'START_TRANSLATION', provider }, { frameId: 0 }));
     } catch {
       translationResult.textContent = 'Translation failed:\nWeb page connection is unavailable.';
     } finally { translating = false; updateControls(); }

@@ -13,6 +13,18 @@ button {
   cursor: pointer;
 }
 
+label {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 12px;
+}
+
+select {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px;
+}
+
 #ocr-result,
 #translation-result {
   white-space: pre-line;

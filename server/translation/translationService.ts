@@ -15,7 +15,9 @@ function validateRequest(value: unknown): TranslationBatchRequest {
     if (ids.has(block.id)) throw new Error(`Duplicate request ID: ${block.id}`);
     ids.add(block.id);
   }
-  return { imageId: request.imageId, blocks: request.blocks.map(block => ({ id: block.id, text: block.text.replace(/\s+/g, ' ').trim() })) };
+  if (request.provider !== 'google' && request.provider !== 'openai') throw new Error('Unknown translation provider.');
+  return { provider: request.provider, imageId: request.imageId,
+    blocks: request.blocks.map(block => ({ id: block.id, text: block.text.replace(/\s+/g, ' ').trim() })) };
 }
 
 export class TranslationService {
@@ -24,15 +26,19 @@ export class TranslationService {
 
   async translate(value: unknown): Promise<TranslationBatchResponse> {
     const request = validateRequest(value);
-    const cacheKey = JSON.stringify([this.provider.name,
+    if (request.provider !== this.provider.id) throw new Error('Translation provider mismatch.');
+    const cacheKey = JSON.stringify([this.provider.id, this.provider.name, 'en', 'tr',
       request.blocks.map(block => block.text.toLocaleLowerCase('en-US'))]);
     const cached = this.cache.get(cacheKey);
     if (cached) return {
+      provider: this.provider.id,
       translations: cached.translations.map((item, index) => ({ ...item, id: request.blocks[index].id })),
       cached: true,
+      ...(this.provider.getUsage ? { usage: this.provider.getUsage() } : {}),
     };
     const result = validateTranslationResponse(request, await this.provider.translate(request));
     this.cache.set(cacheKey, result);
-    return { translations: result.translations.map(item => ({ ...item })), cached: false };
+    return { provider: this.provider.id, translations: result.translations.map(item => ({ ...item })), cached: false,
+      ...(this.provider.getUsage ? { usage: this.provider.getUsage() } : {}) };
   }
 }

@@ -1,15 +1,31 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { resolve } from 'node:path';
 import { loadLocalEnv } from './env';
-import { createOpenAIProvider, TranslationProviderError } from './translation/openAIProvider';
+import { createOpenAIProvider } from './translation/openAIProvider';
+import { createGoogleTranslationProvider } from './translation/googleTranslationProvider';
+import { GoogleUsageStore } from './translation/googleUsageStore';
 import { TranslationService } from './translation/translationService';
+import { TranslationRouter } from './translation/translationRouter';
+import { TranslationProviderError } from './translation/types';
 
 loadLocalEnv();
 const host = '127.0.0.1';
 const port = Number(process.env.TRANSLATION_PORT || 4317);
-const service = new TranslationService(createOpenAIProvider({
-  apiKey: process.env.OPENAI_API_KEY,
-  model: process.env.OPENAI_MODEL || 'gpt-5.6-luna',
-}));
+const configuredLimit = Number(process.env.GOOGLE_FREE_MODE_MONTHLY_LIMIT || 450_000);
+const usageStore = new GoogleUsageStore(resolve('.data/google-translation-usage.json'),
+  Number.isSafeInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : 450_000);
+const services = {
+  google: new TranslationService(createGoogleTranslationProvider({
+    apiKey: process.env.GOOGLE_TRANSLATE_API_KEY,
+    projectId: process.env.GOOGLE_TRANSLATE_PROJECT_ID,
+    usageStore,
+  })),
+  openai: new TranslationService(createOpenAIProvider({
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.OPENAI_MODEL || 'gpt-5.6-luna',
+  })),
+};
+const router = new TranslationRouter(services);
 const allowedOrigin = (origin?: string) => !origin || /^chrome-extension:\/\/[a-p]{32}$/.test(origin) ||
   /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin);
 
@@ -44,7 +60,7 @@ const server = createServer((request, response) => {
   if (request.method !== 'POST' || request.url !== '/api/translate') {
     response.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'Not found.' } })); return;
   }
-  void readJson(request).then(value => service.translate(value)).then(result => {
+  void readJson(request).then(value => router.translate(value)).then(result => {
     response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(result));
   }, (error: unknown) => {
     const providerError = error instanceof TranslationProviderError ? error : undefined;
@@ -57,5 +73,5 @@ const server = createServer((request, response) => {
 
 server.listen(port, host, () => {
   console.log(`[Webtoon Translator] Translation server listening on http://${host}:${port}`);
-  console.log(`[Webtoon Translator] Provider model: ${process.env.OPENAI_MODEL || 'gpt-5.6-luna'}`);
+  console.log('[Webtoon Translator] Providers: Google Translation NMT, OpenAI AI');
 });

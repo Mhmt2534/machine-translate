@@ -1,7 +1,9 @@
 import type { TextBlock } from '../ocr/types';
 
+export type TranslationProviderId = 'google' | 'openai';
+export interface GoogleUsage { month: string; characters: number; limit: number }
 export interface TranslationBlockInput { id: string; text: string }
-export interface TranslationBatchRequest { imageId: string; blocks: TranslationBlockInput[] }
+export interface TranslationBatchRequest { provider: TranslationProviderId; imageId: string; blocks: TranslationBlockInput[] }
 export interface TranslationBatchItem {
   id: string;
   translatedText: string | null;
@@ -9,7 +11,12 @@ export interface TranslationBatchItem {
   reason?: string;
   error?: string;
 }
-export interface TranslationBatchResponse { translations: TranslationBatchItem[]; cached?: boolean }
+export interface TranslationBatchResponse {
+  provider: TranslationProviderId;
+  translations: TranslationBatchItem[];
+  cached?: boolean;
+  usage?: GoogleUsage;
+}
 
 export interface TranslatedTextBlock {
   id: string;
@@ -36,4 +43,6 @@ export interface TranslationStatus {
   skipped: number;
   errors: number;
   batches: number;
+  provider?: TranslationProviderId;
+  usage?: GoogleUsage;
 }

@@ -1,4 +1,4 @@
-import type { TranslationBatchRequest, TranslationImageInput } from './types';
+import type { TranslationBatchRequest, TranslationImageInput, TranslationProviderId } from './types';
 
 export const TRANSLATION_BATCH_CONFIG = { maxBlocks: 12, maxCharacters: 5000 } as const;
 
@@ -12,6 +12,7 @@ function readingOrder<T extends { x: number; y: number; width: number; height: n
 /** Image sırasını ve her image içindeki okuma sırasını koruyarak bağlam batch'leri oluşturur. */
 export function createTranslationBatches(
   images: readonly TranslationImageInput[],
+  provider: TranslationProviderId = 'google',
   config: { maxBlocks: number; maxCharacters: number } = TRANSLATION_BATCH_CONFIG,
 ): TranslationBatchRequest[] {
   const batches: TranslationBatchRequest[] = [];
@@ -19,7 +20,7 @@ export function createTranslationBatches(
     let blocks: TranslationBatchRequest['blocks'] = [];
     let characters = 0;
     const flush = () => {
-      if (blocks.length) batches.push({ imageId: image.imageId, blocks });
+      if (blocks.length) batches.push({ provider, imageId: image.imageId, blocks });
       blocks = []; characters = 0;
     };
     for (const block of readingOrder(image.blocks)) {

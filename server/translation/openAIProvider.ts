@@ -1,4 +1,4 @@
-import type { TranslationProvider, TranslationRequest, TranslationResult } from './types';
+import { TranslationProviderError, type TranslationProvider, type TranslationRequest, type TranslationResult } from './types';
 
 export const TRANSLATION_INSTRUCTIONS = `You translate English OCR text from webtoon and manga dialogue into natural Turkish.
 Use surrounding blocks in the same request as context, but return a separate translation for every block ID.
@@ -7,10 +7,6 @@ questions, exclamations, hesitation, and punctuation. The source is OCR: silentl
 such as FEEL1NG, but never invent a sentence absent from the source. Do not add explanations. Do not censor.
 Never move meaning between block IDs. If a block is unrecoverable OCR garbage, set skip=true, translatedText=null,
 and reason="unrecoverable-ocr". A small typo in otherwise meaningful dialogue is not a reason to skip.`;
-
-export class TranslationProviderError extends Error {
-  constructor(public readonly code: string, message: string, public readonly status = 502) { super(message); }
-}
 
 interface OpenAIProviderOptions {
   apiKey?: string;
@@ -58,6 +54,7 @@ export function createOpenAIProvider(options: OpenAIProviderOptions): Translatio
   const maxRetries = options.maxRetries ?? 2;
   const timeoutMs = options.timeoutMs ?? 60000;
   return {
+    id: 'openai',
     name: `openai:${options.model}`,
     async translate(request: TranslationRequest): Promise<TranslationResult> {
       if (!options.apiKey) throw new TranslationProviderError('API_KEY_MISSING', 'OPENAI_API_KEY is missing.', 503);

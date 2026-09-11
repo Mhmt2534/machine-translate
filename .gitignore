@@ -4,3 +4,4 @@ dist/
 .test-profile/
 .env
 dist-server/
+.data/

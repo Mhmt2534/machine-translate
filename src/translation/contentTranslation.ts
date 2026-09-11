@@ -1,6 +1,18 @@
 import { createTranslationBatches } from './batching';
 import { validateTranslationResponse } from './responseValidation';
-import type { TranslatedTextBlock, TranslationBatchResponse, TranslationImageInput, TranslationStatus } from './types';
+import type { TranslatedTextBlock, TranslationBatchResponse, TranslationImageInput, TranslationProviderId, TranslationStatus } from './types';
+import type { TextBlock } from '../ocr/types';
+
+const engineName = (provider: TranslationProviderId) => provider === 'google' ? 'Google Translate' : 'OpenAI AI';
+
+export function toTranslatedTextBlock(source: TextBlock, item: TranslationBatchResponse['translations'][number]): TranslatedTextBlock {
+  return {
+    id: item.id, originalText: source.text, translatedText: item.translatedText ?? '',
+    x: source.x, y: source.y, width: source.width, height: source.height,
+    confidence: source.confidence, qualityScore: source.qualityScore,
+    skipped: item.skip, skipReason: item.reason, error: item.error,
+  };
+}
 
 export function installTranslation(onResults: (results: TranslatedTextBlock[]) => void) {
   let input: TranslationImageInput[] = [];
@@ -18,14 +30,14 @@ export function installTranslation(onResults: (results: TranslatedTextBlock[]) =
     onResults([]);
   };
 
-  const run = async () => {
+  const run = async (provider: TranslationProviderId) => {
     if (!status.ready || status.running) return;
     const runGeneration = generation;
-    const batches = createTranslationBatches(input);
+    const batches = createTranslationBatches(input, provider);
     const sources = new Map(input.flatMap(image => image.blocks.map(block => [block.id, block] as const)));
     const results: TranslatedTextBlock[] = [];
     status = { ...status, running: true, message: `Translating batch 1 / ${batches.length}...`,
-      translated: 0, skipped: 0, errors: 0, batches: batches.length };
+      translated: 0, skipped: 0, errors: 0, batches: batches.length, provider, usage: undefined };
     let fatalError = '';
     for (const [index, batch] of batches.entries()) {
       if (runGeneration !== generation) return;
@@ -35,20 +47,16 @@ export function installTranslation(onResults: (results: TranslatedTextBlock[]) =
         if (!raw || typeof raw !== 'object') throw new Error('Local translation server returned no response.');
         if ('error' in raw) throw new Error(raw.error);
         const response = validateTranslationResponse(batch, raw);
+        status.usage = raw.usage;
         for (const item of response.translations) {
           const source = sources.get(item.id)!;
-          const result: TranslatedTextBlock = {
-            id: item.id, originalText: source.text, translatedText: item.translatedText ?? '',
-            x: source.x, y: source.y, width: source.width, height: source.height,
-            confidence: source.confidence, qualityScore: source.qualityScore,
-            skipped: item.skip, skipReason: item.reason, error: item.error,
-          };
+          const result = toTranslatedTextBlock(source, item);
           results.push(result);
           if (item.error) status.errors++;
           else if (item.skip) status.skipped++;
           else status.translated++;
           console.log('[Webtoon Translator] Translation', {
-            id: result.id, original: result.originalText,
+            provider, id: result.id, original: result.originalText,
             translated: result.translatedText || null, skipped: Boolean(result.skipped), reason: result.skipReason,
           });
         }
@@ -63,7 +71,7 @@ export function installTranslation(onResults: (results: TranslatedTextBlock[]) =
             confidence: source.confidence, qualityScore: source.qualityScore,
             skipped: true, skipReason: 'translation-error', error: fatalError,
           });
-          console.error('[Webtoon Translator] Translation error', { id: block.id, error: fatalError });
+          console.error('[Webtoon Translator] Translation error', { provider, id: block.id, error: fatalError });
         }
         status.errors += unprocessed.length;
         break;
@@ -72,15 +80,17 @@ export function installTranslation(onResults: (results: TranslatedTextBlock[]) =
     if (runGeneration !== generation) return;
     status.running = false;
     status.message = fatalError ? `Translation failed:\n${fatalError}` :
-      `Translation complete\nBlocks: ${status.blocks}\nTranslated: ${status.translated}\nSkipped: ${status.skipped}\nErrors: ${status.errors}`;
+      `Translation complete\nEngine: ${engineName(provider)}\nBlocks: ${status.blocks}\nTranslated: ${status.translated}\nSkipped: ${status.skipped}\nErrors: ${status.errors}` +
+        (status.usage ? `\nGoogle monthly usage:\n${status.usage.characters.toLocaleString()} / ${status.usage.limit.toLocaleString()} characters` : '');
     onResults(results);
   };
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'GET_TRANSLATION_STATUS') sendResponse(status);
     if (message?.type === 'START_TRANSLATION') {
+      const provider: TranslationProviderId = message.provider === 'openai' ? 'openai' : 'google';
       if (!status.ready) status.message = 'Translation unavailable: Run Detect Text first.';
-      else if (!status.running) void run().catch((error: unknown) => {
+      else if (!status.running) void run(provider).catch((error: unknown) => {
         status.running = false; status.errors++; status.message = `Translation failed:\n${String(error)}`;
       });
       sendResponse(status);

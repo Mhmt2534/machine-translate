@@ -13,6 +13,11 @@
     <p id="scan-result" role="status" aria-live="polite"></p>
     <button id="detect-text" type="button">Detect Text</button>
     <p id="ocr-result" role="status" aria-live="polite"></p>
+    <label for="translation-engine">Translation engine:</label>
+    <select id="translation-engine">
+      <option value="google" selected>Google Translate — Free / Fast</option>
+      <option value="openai">OpenAI AI — Context-aware / API cost</option>
+    </select>
     <button id="translate-text" type="button" disabled>Translate Text</button>
     <p id="translation-result" role="status" aria-live="polite"></p>
   </body>

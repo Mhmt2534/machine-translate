@@ -24,7 +24,8 @@ const path = require('node:path');
         skip: false,
       }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ translations }));
+      res.end(JSON.stringify({ provider: request.provider, translations,
+        usage: { month: '2026-09', characters: 123, limit: 450000 } }));
     });
   });
   await new Promise((resolve, reject) => translationServer.once('error', reject).listen(4317, '127.0.0.1', resolve));
@@ -115,10 +116,12 @@ const path = require('node:path');
     await popup.click('#translate-text');
     await popup.waitForFunction(() => document.querySelector('#translation-result').textContent.includes('Translation complete'), null, { timeout: 30000 });
     const translationText = await popup.locator('#translation-result').textContent();
+    assert.match(translationText, /Engine: Google Translate/);
     assert.match(translationText, new RegExp(`Blocks: ${status.textBlocks}`));
     assert.match(translationText, new RegExp(`Translated: ${status.textBlocks}`));
     assert.match(translationText, /Skipped: 0/);
     assert.match(translationText, /Errors: 0/);
+    assert.match(translationText, /123 \/ 450,000 characters/);
     assert.ok(translationCalls > 0);
     assert.equal(logs.filter(text => text.includes('[Webtoon Translator] Translation')).length, status.textBlocks);
     await page.screenshot({ path: '.test-profile/ocr-result.png', fullPage: true });

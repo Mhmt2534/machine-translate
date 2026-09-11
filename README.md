@@ -1,6 +1,6 @@
-# Webtoon Translator — Adım 3: Bağlamlı AI çeviri
+# Webtoon Translator — Adım 3.1: Google NMT ve OpenAI çeviri sağlayıcıları
 
-Chrome / Edge 116+ (Chromium) için Manifest V3 eklentisi. Büyük `img` elementlerini bulur, en fazla 3 adayda Tesseract.js 7 ile İngilizce OCR çalıştırır ve final metin bloklarını localhost'taki Node/TypeScript sunucusu üzerinden bağlamlı olarak Türkçeye çevirir. Görselin gerçek dosyasını ve üzerindeki yazıları değiştirmez.
+Chrome / Edge 116+ (Chromium) için Manifest V3 eklentisi. Büyük `img` elementlerini bulur, en fazla 3 adayda Tesseract.js 7 ile İngilizce OCR çalıştırır ve final metin bloklarını localhost'taki Node/TypeScript sunucusu üzerinden Türkçeye çevirir. Varsayılan motor Google Cloud Translation NMT'dir; OpenAI bağlamlı çeviri ayrıca seçilebilir. Görselin gerçek dosyasını ve üzerindeki yazıları değiştirmez.
 
 Gruplama single-linkage/connected-component kullanmaz. Her yeni OCR satırı, mevcut block'un tamamıyla karşılaştırılır; oluşacak bounding box, X merkez yayılımı, ortalama merkez uzaklığı, satır yüksekliği, dikey boşluk düzeni, metin yoğunluğu ve doğal image oranları limitleri aşarsa ayrı block olarak başlatılır. Son aşamada büyük iç dikey boşluklar bölünür ve geçersiz/çok büyük block'lar elenir.
 
@@ -20,15 +20,30 @@ Adım 2.5.2 final pass, aynı sütundaki dikey block merge toleransını doğal 
 
 ## Translate Text kullanımı
 
-1. `.env.example` dosyasını `.env` adıyla kopyalayın ve `OPENAI_API_KEY` değerini yazın. İsterseniz `OPENAI_MODEL` değerini değiştirin. `.env` Git dışında tutulur ve build çıktısına kopyalanmaz.
+1. `.env.example` dosyasını `.env` adıyla kopyalayın ve kullanacağınız sağlayıcının değerlerini doldurun. `.env` Git dışında tutulur ve build çıktısına kopyalanmaz.
 2. `npm run build` sonrasında ayrı bir PowerShell penceresinde `npm run server` çalıştırın. Sunucu yalnızca `127.0.0.1:4317` üzerinde dinler.
-3. Uzantıyı reload edip web sayfasını yenileyin. Sırasıyla **Scan Images**, **Detect Text**, ardından etkinleşen **Translate Text** düğmesine basın.
-4. Popup her batch için `Translating batch X / Y...` gösterir. Bittiğinde toplam block, translated, skipped ve error sayılarını verir.
-5. Sayfanın F12 Console bölümünde her sonuç `[Webtoon Translator] Translation` etiketiyle EN/TR olarak görünür. Pembe block işaretinin üzerine gelince aynı bilgi `title` içinde gösterilir. Görsel üzerine Türkçe metin çizilmez.
+3. Uzantıyı reload edip web sayfasını yenileyin. **Scan Images** ve **Detect Text** sonrasında popup'tan motoru seçin. Varsayılan **Google Translate — Free / Fast**, diğer seçenek **OpenAI AI — Context-aware / API cost**.
+4. **Translate Text** sırasında popup `Translating batch X / Y...` gösterir. Sonuçta motor, block/translated/skipped/error sayıları ve Google seçildiyse yerel aylık kullanım görünür.
+5. Sayfanın F12 Console bölümünde her sonuç provider alanıyla `[Webtoon Translator] Translation` olarak görünür. Pembe block işaretinin üzerine gelince EN/TR bilgisi gösterilir. Görsel üzerine Türkçe metin çizilmez.
 
-Her candidate image ayrı bağlamdır. Block'lar üstten alta, yaklaşık aynı satırda soldan sağa sıralanır; bir batch en fazla 12 block veya 5000 kaynak karakter içerir. Model bütün batch'i bağlam olarak görür fakat her block ID için ayrı sonuç üretir. OpenAI Responses API structured output kullanılır. Prompt doğal günlük Türkçe, isim/ton/noktalama koruma, küçük OCR hatalarını bağlamdan düzeltme ve kurtarılamayan OCR için `unrecoverable-ocr` SKIP kurallarını içerir.
+### A) Google Cloud Translation NMT
 
-Sunucu bilinmeyen ve duplicate ID'leri reddeder. Eksik ID veya boş çeviri yalnızca ilgili block'u error olarak işaretler. 429 ve 5xx yanıtları en fazla iki kez 500/1000 ms gecikmeyle yeniden denenir. Normalize edilmiş aynı block dizisi, model ve sıra için işlem belleğinde cache tutulur; sunucu kapanınca cache silinir. API anahtarı yalnızca sunucu sürecindeki `.env` dosyasından okunur ve loglanmaz.
+1. Google Cloud Console'da bir proje oluşturun veya seçin.
+2. Projede **Cloud Translation API** hizmetini etkinleştirin ve Google'ın istediği billing kurulumunu tamamlayın.
+3. Proje için bir API key oluşturun; mümkünse anahtarı Cloud Translation API ve yerel kullanımınızla sınırlandırın.
+4. `.env` içine `GOOGLE_TRANSLATE_API_KEY`, `GOOGLE_TRANSLATE_PROJECT_ID` ve isteğe bağlı `GOOGLE_FREE_MODE_MONTHLY_LIMIT` değerlerini yazın.
+
+Provider resmî [Cloud Translation Basic v2 translate](https://docs.cloud.google.com/translate/docs/reference/rest/v2/translate) metodunu, `source=en`, `target=tr`, `format=text`, `model=nmt` ile kullanır. Aynı image batch'indeki metinler tek `q` dizisi olarak gönderilir ve cevap sırası block ID'lerine eşlenir. Bu, consumer Google Translate web uygulamasından farklı bir Google Cloud hizmetidir; [Google Cloud kurulumu](https://docs.cloud.google.com/translate/docs/setup) ile proje, etkin API ve credential gerektirir. `translate.google.com` scrape edilmez ve unofficial endpoint kullanılmaz.
+
+[Google Cloud fiyatlandırması](https://cloud.google.com/products/translate/pricing) NMT için ayda ilk 500.000 karakteri ücretsiz kredi kapsamında gösterir. Uygulama ayrıca varsayılan 450.000 karakterlik daha düşük bir yerel güvenlik sınırı uygular. `.data/google-translation-usage.json` Google'dan HTTP yanıtı alınan isteklerin gönderilmiş Unicode code point sayısını atomik biçimde saklar ve ay değişince sıfırlar. Bu dosya Google'ın resmî billing meter'ı değildir; kesin kullanım Google Cloud Console'dan kontrol edilmelidir. Limit dolunca Google isteği yapılmaz ve OpenAI'ye otomatik geçilmez.
+
+### B) OpenAI AI Translation
+
+`.env` içine `OPENAI_API_KEY` ve isteğe bağlı `OPENAI_MODEL` yazın. OpenAI seçildiğinde önceki image bağlamı, structured response, küçük OCR typo düzeltme ve kurtarılamayan OCR için SKIP davranışları aynen korunur.
+
+Her candidate image ayrı batch bağlamıdır. Block'lar üstten alta, yaklaşık aynı satırda soldan sağa sıralanır; bir batch en fazla 12 block veya 5000 kaynak karakter içerir. Google bir HTTP isteğinde bu block'ları birlikte çevirir fakat bağlamsal LLM davranışı göstermez. OpenAI modeli batch'in tamamını bağlam olarak görür ve her ID için ayrı structured sonuç üretir.
+
+Sunucu bilinmeyen provider ve duplicate ID'leri reddeder. Eksik ID veya boş çeviri yalnızca ilgili block'u error olarak işaretler. 429 ve 5xx yanıtları sınırlı gecikmeyle yeniden denenir. Cache anahtarı provider, engine/model, `en`, `tr` ve normalize edilmiş sıralı metinleri içerir; Google ve OpenAI sonuçları karışmaz. Google cache hit'i API çağrısı ve kullanım artışı oluşturmaz. Secret değerler yalnızca sunucu sürecindeki `.env` dosyasından okunur ve loglanmaz.
 
 Beklenen hata mesajları API key eksikliği, kapalı localhost sunucusu, provider 401/429, timeout, network ve bozuk structured response durumlarını birbirinden ayırır. Sağlık kontrolü `GET http://127.0.0.1:4317/health` adresindedir. CORS yalnızca Chrome/Edge uzantı origin'leri ile localhost geliştirme origin'lerine izin verir.
 
@@ -119,11 +134,15 @@ Web sayfasının F12 → Console bölümünde:
 - `server/translationServer.ts`: Yalnızca localhost'a bağlanan minimal Node HTTP endpoint'i.
 - `server/translation/types.ts`: Sağlayıcıdan bağımsız `TranslationProvider` sözleşmesi.
 - `server/translation/openAIProvider.ts`: OpenAI Responses API structured-output sağlayıcısı, timeout ve sınırlı retry.
+- `server/translation/googleTranslationProvider.ts`: Resmî Cloud Translation Basic NMT batch sağlayıcısı.
+- `server/translation/googleUsageStore.ts`: Atomik, aylık yerel karakter sayacı ve güvenlik limiti.
+- `server/translation/translationRouter.ts`: Whitelist ile Google/OpenAI provider seçimi.
 - `server/translation/translationService.ts`: İstek doğrulama, ID güvenliği ve session içi cache.
 - `.env.example`: Secret içermeyen yerel yapılandırma örneği; gerçek `.env` Git'e alınmaz.
 - `tests/textGrouping.test.mjs`: Filtreleme, okuma sırası, balon ayrımı, tire/noktalama ve candidate yalıtımı testleri.
 - `tests/textBlockCleanup.test.mjs`: Kısa garbage temizliği, punctuation koruması ve kontrollü block merge testleri.
 - `tests/translation.test.mjs`: Provider, doğrulama, retry, malformed response, batching ve cache birim testleri.
+- `tests/googleTranslation.test.mjs`: Google batching, mapping, hata, provider seçimi, cache, usage ve limit testleri.
 - `tests/translation-server-smoke.cjs`: Localhost binding, CORS ve API key eksikliği entegrasyon testi.
 - `tests/ocr-smoke.cjs`: Gerçek MV3/Edge OCR ve popup çeviri entegrasyon testi.
 
@@ -145,7 +164,7 @@ Yerel sunucuyu başlatma:
 
 ```powershell
 Copy-Item .env.example .env
-# .env içindeki OPENAI_API_KEY değerini düzenleyin
+# .env içinde Google veya OpenAI credential değerlerini düzenleyin
 npm run server
 ```
 

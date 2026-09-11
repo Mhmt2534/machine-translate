@@ -23,5 +23,6 @@ export function validateTranslationResponse(request: TranslationBatchRequest, va
   }
   const translations = request.blocks.map(block => found.get(block.id) ?? ({ id: block.id, translatedText: null, skip: true,
     reason: 'missing-provider-output', error: 'Provider did not return this block.' }));
-  return { translations };
+  const usage = (value as { usage?: TranslationBatchResponse['usage'] }).usage;
+  return { provider: request.provider, translations, ...(usage ? { usage } : {}) };
 }

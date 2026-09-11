@@ -11,7 +11,7 @@ const { createTranslationBatches } = await load('src/translation/batching.ts');
 const { postTranslationBatch } = await load('src/translation/httpClient.ts');
 const { createOpenAIProvider } = await load('server/translation/openAIProvider.ts');
 const { TranslationService } = await load('server/translation/translationService.ts');
-const request = { imageId: 'image-1', blocks: [
+const request = { provider: 'openai', imageId: 'image-1', blocks: [
   { id: 'image-1-block-1', text: 'Are you feeling better now?' },
   { id: 'image-1-block-2', text: 'YEAH... SORRY FOR WORRYING YOU...' },
 ] };
@@ -33,14 +33,14 @@ test('preserves request order for multiple provider outputs', () => {
 });
 
 test('accepts a contextual correction for FEEL1NG', () => {
-  const typo = { imageId: 'image-1', blocks: [{ id: 'b1', text: 'ARE YOU FEEL1NG BETTER NOW?' }] };
+  const typo = { provider: 'openai', imageId: 'image-1', blocks: [{ id: 'b1', text: 'ARE YOU FEEL1NG BETTER NOW?' }] };
   assert.equal(validateTranslationResponse(typo, { translations: [
     { id: 'b1', translatedText: 'Şimdi daha iyi hissediyor musun?', skip: false },
   ] }).translations[0].skip, false);
 });
 
 test('accepts provider SKIP for unrecoverable OCR garbage', () => {
-  const garbage = { imageId: 'image-1', blocks: [{ id: 'b1', text: 'eveaoar Bedi' }] };
+  const garbage = { provider: 'openai', imageId: 'image-1', blocks: [{ id: 'b1', text: 'eveaoar Bedi' }] };
   const item = validateTranslationResponse(garbage, { translations: [
     { id: 'b1', translatedText: null, skip: true, reason: 'unrecoverable-ocr' },
   ] }).translations[0];
@@ -108,7 +108,7 @@ test('reports provider timeout', async () => {
 
 test('uses the in-memory cache for an identical normalized batch', async () => {
   let calls = 0;
-  const provider = { name: 'mock', async translate(value) {
+  const provider = { id: 'openai', name: 'mock', async translate(value) {
     calls++;
     return { translations: value.blocks.map(block => ({ id: block.id, translatedText: 'çeviri', skip: false })) };
   } };
@@ -120,12 +120,12 @@ test('uses the in-memory cache for an identical normalized batch', async () => {
 
 test('cache hit remaps translations when only block IDs change', async () => {
   let calls = 0;
-  const service = new TranslationService({ name: 'fake', async translate(value) {
+  const service = new TranslationService({ id: 'openai', name: 'fake', async translate(value) {
     calls++;
     return { translations: value.blocks.map(block => ({ id: block.id, translatedText: 'aynı çeviri', skip: false })) };
   } });
-  await service.translate({ imageId: 'first', blocks: [{ id: 'old-id', text: '  HELLO   WORLD ' }] });
-  const cached = await service.translate({ imageId: 'second', blocks: [{ id: 'new-id', text: 'hello world' }] });
+  await service.translate({ provider: 'openai', imageId: 'first', blocks: [{ id: 'old-id', text: '  HELLO   WORLD ' }] });
+  const cached = await service.translate({ provider: 'openai', imageId: 'second', blocks: [{ id: 'new-id', text: 'hello world' }] });
   assert.equal(calls, 1);
   assert.equal(cached.cached, true);
   assert.equal(cached.translations[0].id, 'new-id');
@@ -137,7 +137,7 @@ test('batches per image and keeps geometric reading order', () => {
     { id: 'b1', text: 'FIRST', x: 10, y: 10, width: 50, height: 20 },
     { id: 'b3', text: 'THIRD', x: 10, y: 50, width: 50, height: 20 },
   ];
-  const batches = createTranslationBatches([{ imageId: 'image-1', blocks }], { maxBlocks: 2, maxCharacters: 100 });
+  const batches = createTranslationBatches([{ imageId: 'image-1', blocks }], 'openai', { maxBlocks: 2, maxCharacters: 100 });
   assert.deepEqual(batches.map(batch => batch.blocks.map(block => block.id)), [['b1', 'b2'], ['b3']]);
 });
 
