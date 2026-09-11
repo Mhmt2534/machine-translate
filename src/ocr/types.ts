@@ -7,6 +7,17 @@ export interface DetectedText {
   height: number;
 }
 
+export interface TextBlock {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  confidence: number;
+  lines: DetectedText[];
+}
+
 export interface OcrResult {
   regions: DetectedText[];
   width: number;
@@ -17,6 +28,8 @@ export interface OcrStatus {
   running: boolean;
   message: string;
   regions: number;
+  filteredRegions: number;
+  textBlocks: number;
   errors: string[];
 }
 

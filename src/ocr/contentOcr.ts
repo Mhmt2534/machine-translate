@@ -2,9 +2,13 @@ import { createOcrOverlay } from './overlay';
 import { MAX_OCR_IMAGES, MAX_IMAGE_PIXELS, type OcrStatus } from './types';
 import { acquireAndRecognize } from '../image/contentAcquisition';
 import { checkInterrupted, startScrollSession, waitForStableImage } from '../image/autoScroll';
+import { OCR_FILTER_CONFIG } from './config';
+import { filterTextRegions } from './textFiltering';
+import { groupTextRegions } from './textGrouping';
 
 export function installOcr(getCandidates: () => HTMLImageElement[]) {
-  let status: OcrStatus = { running: false, message: `Ready — first ${MAX_OCR_IMAGES} candidates; automatic scroll`, regions: 0, errors: [] };
+  let status: OcrStatus = { running: false, message: `Ready — first ${MAX_OCR_IMAGES} candidates; automatic scroll`,
+    regions: 0, filteredRegions: 0, textBlocks: 0, errors: [] };
   let overlay: ReturnType<typeof createOcrOverlay> | undefined;
 
   async function run() {
@@ -14,7 +18,8 @@ export function installOcr(getCandidates: () => HTMLImageElement[]) {
     const session = startScrollSession(images);
     let processed = 0;
     const failedAcquisitions = new Set<string>();
-    status = { running: true, message: 'OCR processing — page will scroll automatically.', regions: 0, errors: [] };
+    status = { running: true, message: 'OCR processing — page will scroll automatically.',
+      regions: 0, filteredRegions: 0, textBlocks: 0, errors: [] };
     try {
       for (const [index, img] of images.entries()) {
         if (session.signal.aborted) break;
@@ -58,10 +63,28 @@ export function installOcr(getCandidates: () => HTMLImageElement[]) {
           }
           const regions = response.regions;
           for (const region of regions) console.log('[Webtoon Translator] OCR text', region);
+          const filtered = filterTextRegions(regions);
+          if (OCR_FILTER_CONFIG.debug) {
+            for (const rejected of filtered.rejected) {
+              console.debug('[Webtoon Translator] OCR region filtered', rejected);
+            }
+          }
+          const blocks = groupTextRegions(filtered.regions, `image-${index + 1}`);
+          for (const block of blocks) {
+            console.log('[Webtoon Translator] Text block', {
+              id: block.id, text: block.text, confidence: Math.round(block.confidence * 10) / 10,
+              x: block.x, y: block.y, width: block.width, height: block.height, lineCount: block.lines.length,
+            });
+          }
+          console.log('[Webtoon Translator] Text grouping complete', {
+            image: index + 1, rawRegions: regions.length, filteredRegions: filtered.regions.length, textBlocks: blocks.length,
+          });
           console.log('[Webtoon Translator] OCR completed for image', { src: source, method: response.method,
             image: index + 1, regions: regions.length, naturalWidth, naturalHeight, segments: response.segments || 1 });
-          overlay.add(img, source, regions);
+          overlay.add(img, source, regions, blocks);
           status.regions += regions.length;
+          status.filteredRegions += filtered.regions.length;
+          status.textBlocks += blocks.length;
           processed++;
         } catch (error) {
           const detail = `Image ${index + 1}: ${error instanceof Error ? error.message : String(error)}`;
@@ -72,7 +95,7 @@ export function installOcr(getCandidates: () => HTMLImageElement[]) {
     } finally {
       await session.restore();
       status.running = false;
-      status.message = `${session.signal.aborted ? 'OCR interrupted' : status.errors.length ? 'OCR finished with errors' : 'OCR complete'}\nImages processed: ${processed} / ${images.length}\nErrors: ${status.errors.length}\nText regions: ${status.regions}`;
+      status.message = `${session.signal.aborted ? 'OCR interrupted' : status.errors.length ? 'OCR finished with errors' : 'OCR complete'}\nImages processed: ${processed} / ${images.length}\nErrors: ${status.errors.length}\nOCR regions: ${status.regions}\nText blocks: ${status.textBlocks}`;
       if (!images.length) status.message += '\nNo candidate images. Önce Scan Images çalıştırın.';
     }
   }

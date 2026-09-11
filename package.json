@@ -1,10 +1,11 @@
 {
   "name": "webtoon-translator",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "scripts": {
     "build": "tsc && node scripts/build.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:unit": "node --test tests/*.test.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.0",

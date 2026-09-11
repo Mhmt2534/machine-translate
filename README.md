@@ -1,4 +1,4 @@
-# Webtoon Translator — Adım 2: Yerel İngilizce OCR
+# Webtoon Translator — Adım 2.5: OCR metin gruplama
 
 Chrome / Edge 116+ (Chromium) için Manifest V3 eklentisi. Ana sayfa DOM'undaki büyük `img` elementlerini bulur ve en fazla 3 yüklenmiş adayda Tesseract.js 7 ile İngilizce OCR çalıştırır. Çeviri, harici AI servisi ve backend içermez. Görselin gerçek dosyasını veya yazılarını değiştirmez.
 
@@ -7,8 +7,8 @@ Chrome / Edge 116+ (Chromium) için Manifest V3 eklentisi. Ana sayfa DOM'undaki 
 1. Build alın, tarayıcıda eklentiyi reload edin ve web sayfasını yenileyin. Popup'ı webtoon sekmesindeyken **araç çubuğundaki eklenti simgesine tıklayarak** açın. Bu, ekran yakalama için gereken geçici `activeTab` iznini verir.
 2. Sayfayı kaydırarak görselleri yükleyin; **Scan Images** ile adayları kontrol edin.
 3. **Detect Text** düğmesine bir kez basın. Başlangıçta DOM sırasındaki ilk N candidate alınır; görünür olma filtresi yoktur. Varsayılan N=3, `src/ocr/config.ts` içinden değişir. Orijinal piksel/fetch yolları çalışıyorsa gereksiz scroll yapılmaz; viewport fallback tüm candidate'ı otomatik kaydırarak işler.
-4. Popup `Processing image 1 / 3`, `Capture 1 / 2` ve otomatik scroll bilgisini gösterir. Sonunda `Images processed: 3 / 3`, `Errors: 0`, `Text regions: N` özeti görünür. Bir candidate hata verirse sonraki işlenir.
-5. Metin satırları mavi kutular ve **OCR 1**, **OCR 2** etiketleriyle gösterilir. Kutular kaydırma/boyut değişiminde izlenir, yeniden Detect Text çalışınca temizlenir. Kaynağı değişen veya kaldırılan görsellerin kutuları gizlenir.
+4. Popup `Processing image 1 / 3`, `Capture 1 / 2` ve otomatik scroll bilgisini gösterir. Sonunda `Images processed: 3 / 3`, `Errors: 0`, `OCR regions: N`, `Text blocks: N` özeti görünür. Bir candidate hata verirse sonraki işlenir.
+5. Ham OCR satırları ince mavi, gruplanmış metin blokları kalın pembe kutularla gösterilir. Her metin bloğunda **BLOCK N** etiketi vardır. Kutular kaydırma/boyut değişiminde izlenir, yeniden Detect Text çalışınca temizlenir.
 6. Popup kapanabilir; işlemi tekrar açarak izleyebilirsiniz. Sayfa yenilenirse o sayfanın işlem takibi ve kutuları sıfırlanır.
 7. İş sonunda `try/finally` ile başlangıçtaki X/Y scroll konumuna dönülür. OCR sırasında sayfaya wheel/touch/scroll tuşu veya tıklama gibi manuel giriş gelirse çalışma güvenli bir kontrol noktasında kesilir ve konum geri yüklenir. Sayfa kilitlenmez; screenshot sırasında sekmeyi aktif tutun.
 
@@ -18,7 +18,7 @@ Her candidate'ın ancestor zinciri incelenir. `overflow-y: auto|scroll|overlay` 
 
 Oturum başında window X/Y ile kullanılabilecek tüm container'ların `scrollTop/scrollLeft` değerleri kaydedilir. Scroll snap, smooth scroll ve anchoring ayarları yalnızca işlem boyunca devre dışıdır. `finally` içinde inner container'lar ve window iki frame doğrulamasıyla başlangıç değerlerine döndürülür, stiller eski halleriyle geri yüklenir.
 
-Viewport'tan uzun candidate yukarıdan aşağıya işlenir. Sonraki parça öncekinin görünür yüksekliğinin %12'si kadar overlap bırakır. Her capture'ın gerçek rect'i ve ekran boyutları ayrı hesaplanır; koordinatlar doğal görsele çevrildikten sonra sonuçlar birleştirilir. Kaplanan alanın ilerlediği ve arada boşluk kalmadığı kontrol edilir. Aynı metne benzeyen, kutuları ciddi örtüşen ve merkezleri yakın olan sonuçlarda yüksek confidence korunur. Bu konuşma balonu/metin bloğu gruplaması değildir.
+Viewport'tan uzun candidate yukarıdan aşağıya işlenir. Sonraki parça öncekinin görünür yüksekliğinin %12'si kadar overlap bırakır. Her capture'ın gerçek rect'i ve ekran boyutları ayrı hesaplanır; koordinatlar doğal görsele çevrildikten sonra sonuçlar birleştirilir. Kaplanan alanın ilerlediği ve arada boşluk kalmadığı kontrol edilir. Aynı metne benzeyen, kutuları ciddi örtüşen ve merkezleri yakın olan capture sonuçlarında yüksek confidence korunur. Ardından her image kendi içinde hafif gürültü filtresinden ve geometrik metin gruplamasından geçer.
 
 Capture sırasında adayı örten fixed/sticky öğelerin ve kendi test overlay'lerimizin yalnızca görünürlüğü geçici kapatılır; layout değiştirilmez ve hemen geri yüklenir. Effective capture alanı browser viewport ∩ tüm overflow container client alanları ∩ candidate olarak hesaplanır. Bir candidate scroll edilemezse mevcut görünür kesit denenir; gerçekten görünür kesit yoksa `Candidate scroll failed`/candidate hatası loglanır ve sıradaki candidate'a geçilir. Yatay segmentleme henüz yoktur; görsel genişliği effective viewport'a sığmalıdır.
 
@@ -42,6 +42,8 @@ Web sayfasının F12 → Console bölümünde:
 
 ```text
 [Webtoon Translator] OCR text { text: "HELLO WORLD", confidence: ..., x: ..., y: ..., width: ..., height: ... }
+[Webtoon Translator] Text block { id: "image-1-block-1", text: "HELLO WORLD!", confidence: ..., x: ..., y: ..., width: ..., height: ..., lineCount: ... }
+[Webtoon Translator] Text grouping complete { image: 1, rawRegions: ..., filteredRegions: ..., textBlocks: ... }
 [Webtoon Translator] OCR completed for image { src: ..., regions: ..., naturalWidth: ..., naturalHeight: ... }
 [Webtoon Translator] Image acquisition failed { method: "extension-fetch", imageUrl: ..., pageUrl: ..., hostname: ..., status: 403, statusText: "Forbidden", ... }
 [Webtoon Translator] Image acquired { method: "viewport-capture", ... }
@@ -51,7 +53,7 @@ Web sayfasının F12 → Console bölümünde:
 
 - `src/ocr/config.ts`: `MAX_OCR_IMAGES = 3`, %12 overlap, en fazla 40 segment/görsel, stabilizasyon süreleri ve duplicate eşikleri. `types.ts` içinde en fazla 32 megapiksel ve 20 MB/görsel sınırı vardır. Görseller ve parçalar sırayla işlenir.
 - Her fetch en fazla 15 saniye, her parçanın OCR worker işlemi en fazla 120 saniye beklenir. Uzun görseller daha fazla capture gerektirir.
-- Tesseract İngilizce ve `SPARSE_TEXT` modundadır. El yazısı, stilize font, döndürülmüş yazı ve düşük kontrastta hatalar olabilir. Konuşma balonu tespiti yapılmaz; bölgeler konuşma balonu değil OCR satırlarıdır.
+- Tesseract İngilizce ve `SPARSE_TEXT` modundadır. El yazısı, stilize font, döndürülmüş yazı ve düşük kontrastta hatalar olabilir. Gruplama yalnızca geometri kullanır; konuşma balonu segmentasyonu yapmaz.
 - Overlay normal ölçekleme, padding/border ve yaygın `object-fit/object-position` kullanımlarını destekler. CSS döndürme/skew, karmaşık object-position calc ifadeleri ve ataların kırpma/maskeleri için hizalama garantisi yoktur.
 - Lazy-load ile henüz yüklenmeyenler OCR'a alınmaz; kaydırıp tekrar deneyin. Yeniden Detect Text OCR'ı yeniden çalıştırır, kalıcı OCR önbelleği yoktur.
 - Kontrollü test: `tests/ocr-smoke.cjs`. Microsoft Edge ve Playwright gerekir (`npm install --no-save playwright`); build sonrası `node tests/ocr-smoke.cjs`. İzole `.test-profile` kullanır. Test HTTP sunucusu yalnızca test süresince çalışır, eklenti backend'i değildir.
@@ -84,10 +86,13 @@ Web sayfasının F12 → Console bölümünde:
 - `src/image/captureGeometry.ts`, `captureMapping.ts`: Görünür alan ve screenshot → doğal koordinat dönüşümü.
 - `src/image/types.ts`: Edinme istek/sonuç ve log tipleri.
 - `src/image/autoScroll.ts`: Stabilizasyon, deterministik scroll, kullanıcı müdahalesi ve başlangıç konumu restorasyonu.
-- `src/ocr/config.ts`, `deduplicate.ts`: Ortak capture sınırları ve overlap tekrar temizliği.
-- `src/ocr/contentOcr.ts`: İlk 3 adayın sıralı OCR akışı, durum ve console logları.
+- `src/ocr/config.ts`, `deduplicate.ts`: Ortak capture, filtreleme ve gruplama eşikleri ile overlap tekrar temizliği.
+- `src/ocr/textFiltering.ts`: Saf, muhafazakâr OCR gürültü filtresi ve ret nedenleri.
+- `src/ocr/textGrouping.ts`: Saf geometrik gruplama, okuma sırası, metin birleştirme ve block confidence hesabı.
+- `src/ocr/contentOcr.ts`: İlk 3 adayın sıralı OCR, filtreleme ve gruplama akışı; durum ve console logları.
 - `src/ocr/types.ts`: Koordinat tipleri ve performans sınırları.
-- `src/ocr/overlay.ts`: Mavi OCR kutuları ve ekran koordinatı dönüşümü.
+- `src/ocr/overlay.ts`: Mavi OCR bölgeleri, pembe TextBlock kutuları ve ekran koordinatı dönüşümü.
+- `tests/textGrouping.test.mjs`: Filtreleme, okuma sırası, balon ayrımı, tire/noktalama ve candidate yalıtımı testleri.
 - `tests/ocr-smoke.cjs`: Gerçek MV3/Edge OCR entegrasyon testi.
 
 ## Build (Windows 11 / PowerShell)

@@ -66,6 +66,9 @@ const path = require('node:path');
     console.log('OCR status:', status);
     assert.deepEqual(status.errors, []);
     assert.ok(status.regions >= 6);
+    assert.equal(status.filteredRegions, status.regions);
+    assert.ok(status.textBlocks > 0);
+    assert.match(status.message, /Text blocks: \d+/);
     assert.equal(logs.filter(text => text.includes('OCR completed for image')).length, 3);
     assert.ok(logs.some(text => text.includes('HELLO WORLD')));
     assert.equal(await page.locator('[data-wt-ocr-overlay]').count(), 1);
@@ -119,7 +122,7 @@ const path = require('node:path');
     assert.deepEqual(status.errors, []);
     assert.ok(status.regions >= 2);
     assert.equal(downloads, beforeLoadedRun);
-    console.log('PASS: real MV3 extension, local WASM/eng, cross-origin tainted canvas bypassed via extension fetch, 3-image limit, text regions, popup status.');
+    console.log('PASS: real MV3 extension, local WASM/eng, cross-origin tainted canvas bypassed via extension fetch, 3-image limit, text grouping, popup status.');
   } finally {
     await context?.close();
     await new Promise(resolve => server.close(resolve));
