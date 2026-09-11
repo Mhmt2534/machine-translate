@@ -86,8 +86,8 @@ function joinText(rows: DetectedText[][], config: GroupingConfig): string {
       const text = line.text.replace(/\s+/g, ' ').trim();
       if (!text) continue;
       const newRow = rowIndex > 0 && itemIndex === 0;
-      const safeHyphenJoin = newRow && new RegExp(`\\p{Lu}{${config.minHyphenFragmentLetters},}-$`, 'u').test(output) &&
-        new RegExp(`^\\p{Lu}{${config.minHyphenFragmentLetters},}$`, 'u').test(text);
+      const safeHyphenJoin = newRow && new RegExp(`\\p{L}{${config.minHyphenFragmentLetters},}-$`, 'u').test(output) &&
+        new RegExp(`^\\p{L}{2,}-?$`, 'u').test(text);
       if (safeHyphenJoin) output = output.slice(0, -1) + text;
       else if (/^[,.;:!?%)\]}…]+/.test(text)) output += text;
       else output += `${output ? ' ' : ''}${text}`;

@@ -6,6 +6,8 @@ Gruplama single-linkage/connected-component kullanmaz. Her yeni OCR satırı, me
 
 Adım 2.5.1'de ilk geometric block'lar ayrıca metin uzunluğu, alfasayısal/symbol oranı, kısa metne göre confidence, child confidence ve yakın anlamlı block bağlamıyla doğrulanır. Ardından yalnızca aynı sütundaki dikey komşular `mergeTextBlocks` ile birleştirilir; aynı yakınlıktaki rakip üçüncü block varsa merge yapılmaz. Popup ilk ve final block sayılarını ayrı gösterir.
 
+Adım 2.5.2 final pass, aynı sütundaki dikey block merge toleransını doğal image sınırları içinde genişletir ve her birleşmeyi teşhis kaydı olarak üretir. Merge sonrası sözlüksüz sanity score; confidence, alfabetik/izinli karakter oranı, kelime şekli, casing, uzunluk ve beklenmeyen sembolleri birlikte değerlendirir. Uzun typo içeren cümleleri ve özel isimleri korurken düşük güvenli kısa garbage sonuçlarını final listeden çıkarır.
+
 ## Detect Text kullanımı
 
 1. Build alın, tarayıcıda eklentiyi reload edin ve web sayfasını yenileyin. Popup'ı webtoon sekmesindeyken **araç çubuğundaki eklenti simgesine tıklayarak** açın. Bu, ekran yakalama için gereken geçici `activeTab` iznini verir.
@@ -95,6 +97,7 @@ Web sayfasının F12 → Console bölümünde:
 - `src/ocr/textGrouping.ts`: Saf geometrik gruplama, okuma sırası, metin birleştirme ve block confidence hesabı.
 - `src/ocr/textBlockValidation.ts`: Uzunluk ve bağlama duyarlı block kalite doğrulaması.
 - `src/ocr/textBlockMerge.ts`: Dikey komşuluk ve competing-block kontrollü final block birleştirmesi.
+- `src/ocr/textSanity.ts`: Merge sonrası sözlüksüz final metin kalite puanı ve ret nedenleri.
 - `src/ocr/contentOcr.ts`: İlk 3 adayın sıralı OCR, filtreleme ve gruplama akışı; durum ve console logları.
 - `src/ocr/types.ts`: Koordinat tipleri ve performans sınırları.
 - `src/ocr/overlay.ts`: Mavi OCR bölgeleri, pembe TextBlock kutuları ve ekran koordinatı dönüşümü.

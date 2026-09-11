@@ -9,6 +9,7 @@ const load = async entry => {
 const { createTextBlock } = await load('src/ocr/textGrouping.ts');
 const { validateTextBlocks } = await load('src/ocr/textBlockValidation.ts');
 const { mergeTextBlocks } = await load('src/ocr/textBlockMerge.ts');
+const { scoreTextBlock, validateFinalTextBlocks } = await load('src/ocr/textSanity.ts');
 const image = { width: 1000, height: 1200 };
 const line = (text, x = 100, y = 20, width = 100, height = 30, confidence = 90) =>
   ({ text, x, y, width, height, confidence });
@@ -104,4 +105,51 @@ test('rejects representative short OCR garbage patterns', () => {
   const result = validateTextBlocks(samples, image);
   assert.equal(result.blocks.length, 0);
   assert.equal(result.rejected.length, samples.length);
+});
+
+test('merges the remaining NOW dialogue fragments including SOME- HOW-', () => {
+  const first = createTextBlock([
+    line('NOW...', 100, 20, 90, 30, 82), line("IT'S FINE,", 70, 55, 150, 30, 84),
+  ], 'image-1-block-1');
+  const second = createTextBlock([
+    line('IT WILL', 65, 100, 160, 30, 80), line('WORK', 95, 135, 100, 30, 83),
+    line('SOME-', 100, 170, 90, 30, 78), line('HOW-', 105, 205, 80, 30, 79),
+  ], 'image-1-block-2');
+  const merged = mergeTextBlocks([first, second], image.width, image.height);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].text, "NOW... IT'S FINE, IT WILL WORK SOMEHOW-");
+});
+
+test('joins SOME- HOW and INTRO- DUCE across lines', () => {
+  const some = createTextBlock([line('SOME-', 100, 20), line('HOW', 105, 60)]);
+  const intro = createTextBlock([line('INTRO-', 100, 20), line('DUCE', 105, 60)]);
+  assert.equal(some.text, 'SOMEHOW');
+  assert.equal(intro.text, 'INTRODUCE');
+});
+
+test('final sanity rejects real low-confidence garbage examples', () => {
+  const samples = [
+    block('eveaoor Bedi', 20, 'image-1-block-1', 100, 20, 180),
+    block('TE CLuss', 25, 'image-1-block-2', 100, 60, 130),
+    block('rk Aware', 20, 'image-1-block-3', 100, 100, 130),
+    block('Geri os', 20, 'image-1-block-4', 100, 140, 120),
+    block('WONDER} CLASS} ANGRY', 45, 'image-1-block-5', 100, 180, 260),
+  ];
+  const result = validateFinalTextBlocks(samples);
+  assert.equal(result.blocks.length, 0);
+  assert.equal(result.rejected.length, samples.length);
+});
+
+test('final sanity keeps names and short real dialogue', () => {
+  const samples = [block('MIKOTO', 80), block('ISE.', 75), block('TOUKO', 80), block('!!', 20), block('?', 20)];
+  assert.deepEqual(validateFinalTextBlocks(samples).blocks.map(item => item.text), ['MIKOTO', 'ISE.', 'TOUKO', '!!', '?']);
+});
+
+test('final sanity keeps long dialogue with OCR digit typos', () => {
+  const typo = block('ARE YOU FEEL1NG BETTER NOW?', 55, 'image-1-block-1', 100, 20, 320);
+  const fantasy = block('TH1S AETH3R SIGIL WILL WORK OUT SOMEHOW...', 45, 'image-1-block-2', 100, 60, 430);
+  const result = validateFinalTextBlocks([typo, fantasy]);
+  assert.equal(result.blocks.length, 2);
+  assert.ok(result.blocks.every(item => (item.qualityScore ?? 0) >= 0.58));
+  assert.equal(scoreTextBlock(typo).accepted, true);
 });

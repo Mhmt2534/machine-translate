@@ -6,7 +6,8 @@ import { OCR_FILTER_CONFIG } from './config';
 import { filterTextRegions } from './textFiltering';
 import { groupTextRegionsDetailed } from './textGrouping';
 import { validateTextBlocks } from './textBlockValidation';
-import { mergeTextBlocks } from './textBlockMerge';
+import { mergeTextBlocksDetailed } from './textBlockMerge';
+import { validateFinalTextBlocks } from './textSanity';
 
 export function installOcr(getCandidates: () => HTMLImageElement[]) {
   let status: OcrStatus = { running: false, message: `Ready — first ${MAX_OCR_IMAGES} candidates; automatic scroll`,
@@ -74,10 +75,14 @@ export function installOcr(getCandidates: () => HTMLImageElement[]) {
           }
           const grouping = groupTextRegionsDetailed(filtered.regions, `image-${index + 1}`, imageDimensions);
           const validation = validateTextBlocks(grouping.blocks, imageDimensions);
-          const blocks = mergeTextBlocks(validation.blocks, naturalWidth, naturalHeight);
+          const merge = mergeTextBlocksDetailed(validation.blocks, naturalWidth, naturalHeight);
+          for (const record of merge.merges) console.debug('[Webtoon Translator] Final blocks merged', record);
+          const finalValidation = validateFinalTextBlocks(merge.blocks);
+          const blocks = finalValidation.blocks;
           for (const block of blocks) {
             console.log('[Webtoon Translator] Text block', {
               id: block.id, text: block.text, confidence: Math.round(block.confidence * 10) / 10,
+              qualityScore: Math.round((block.qualityScore ?? 0) * 1000) / 1000,
               x: block.x, y: block.y, width: block.width, height: block.height, lineCount: block.lines.length,
               widthRatio: block.width / naturalWidth, heightRatio: block.height / naturalHeight,
             });
@@ -95,16 +100,25 @@ export function installOcr(getCandidates: () => HTMLImageElement[]) {
               reason: rejected.reason, ...rejected.details,
             });
           }
+          for (const rejected of finalValidation.rejected) {
+            console.debug('[Webtoon Translator] Final block rejected', {
+              id: rejected.block.id, text: rejected.block.text,
+              confidence: Math.round(rejected.block.confidence * 10) / 10,
+              qualityScore: Math.round(rejected.sanity.qualityScore * 1000) / 1000,
+              reason: rejected.sanity.reason,
+            });
+          }
           console.log('[Webtoon Translator] Text grouping complete', {
             image: index + 1, rawRegions: regions.length, filteredRegions: filtered.regions.length,
             initialTextBlocks: grouping.blocks.length, finalTextBlocks: blocks.length,
-            rejectedTextBlocks: grouping.rejected.length + validation.rejected.length,
+            rejectedTextBlocks: grouping.rejected.length + validation.rejected.length + finalValidation.rejected.length,
           });
           console.log('[Webtoon Translator] OCR completed for image', { src: source, method: response.method,
             image: index + 1, regions: regions.length, naturalWidth, naturalHeight, segments: response.segments || 1 });
           overlay.add(img, source, filtered.regions, blocks,
             OCR_FILTER_CONFIG.debug ? filtered.rejected.map(item => item.region) : [],
-            OCR_FILTER_CONFIG.debug ? [...grouping.rejected.map(item => item.block), ...validation.rejected.map(item => item.block)] : []);
+            OCR_FILTER_CONFIG.debug ? [...grouping.rejected.map(item => item.block), ...validation.rejected.map(item => item.block),
+              ...finalValidation.rejected.map(item => item.block)] : []);
           status.regions += regions.length;
           status.filteredRegions += filtered.regions.length;
           status.initialTextBlocks += grouping.blocks.length;

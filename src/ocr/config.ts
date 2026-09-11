@@ -55,17 +55,29 @@ export const TEXT_BLOCK_VALIDATION_CONFIG = {
 } as const;
 
 export const TEXT_BLOCK_MERGE_CONFIG = {
-  maxVerticalGapRatio: 2.6,
+  maxVerticalGapRatio: 2.9,
   minHorizontalOverlapRatio: 0.18,
-  maxCenterDistanceRatio: 0.58,
-  minWidthSimilarityRatio: 0.22,
+  maxCenterDistanceRatio: 0.64,
+  minWidthSimilarityRatio: 0.18,
   maxLineHeightDifferenceRatio: 0.55,
-  maxCenterSpreadRatio: 1.0,
-  maxVerticalGapDifferenceRatio: 1.35,
+  maxCenterSpreadRatio: 1.25,
+  maxVerticalGapDifferenceRatio: 1.55,
   maxBlockWidthRatio: 0.72,
   maxBlockHeightRatio: 0.35,
   maxBlockAreaRatio: 0.12,
   competingScoreMargin: 0.18,
+} as const;
+
+export const FINAL_TEXT_SANITY_CONFIG = {
+  minimumQualityScore: 0.58,
+  lowConfidence: 30,
+  unexpectedSymbolConfidence: 60,
+  shortLowConfidenceCharacters: 16,
+  longTextCharacters: 18,
+  weirdCaseConfidence: 45,
+  lowConfidenceShortPenalty: 0.22,
+  unexpectedSymbolPenalty: 0.25,
+  weirdCasePenalty: 0.15,
 } as const;
 export const VIEWPORT_CAPTURE_CONFIG = {
   overlapRatio: 0.12,

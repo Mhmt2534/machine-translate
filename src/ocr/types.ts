@@ -15,6 +15,7 @@ export interface TextBlock {
   width: number;
   height: number;
   confidence: number;
+  qualityScore?: number;
   lines: DetectedText[];
 }
 

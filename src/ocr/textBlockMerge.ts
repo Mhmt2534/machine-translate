@@ -4,6 +4,8 @@ import type { ImageDimensions, TextBlock } from './types';
 
 type MergeConfig = { [Key in keyof typeof TEXT_BLOCK_MERGE_CONFIG]: number };
 interface MergeCandidate { first: number; second: number; score: number }
+export interface TextBlockMergeRecord { left: string; right: string; result: string }
+export interface TextBlockMergeResult { blocks: TextBlock[]; merges: TextBlockMergeRecord[] }
 
 const centerX = (block: TextBlock) => block.x + block.width / 2;
 const centerY = (block: TextBlock) => block.y + block.height / 2;
@@ -66,14 +68,15 @@ function hasCompetingBlock(candidate: MergeCandidate, blocks: readonly TextBlock
 }
 
 /** İlk geometric grouping'in böldüğü, dikey olarak komşu ve rakipsiz block'ları kontrollü biçimde birleştirir. */
-export function mergeTextBlocks(
+export function mergeTextBlocksDetailed(
   input: readonly TextBlock[],
   imageWidth: number,
   imageHeight: number,
   config: MergeConfig = TEXT_BLOCK_MERGE_CONFIG,
-): TextBlock[] {
+): TextBlockMergeResult {
   const image = { width: imageWidth, height: imageHeight };
   const blocks = input.map(block => ({ ...block, lines: [...block.lines] }));
+  const merges: TextBlockMergeRecord[] = [];
   while (true) {
     const candidates: MergeCandidate[] = [];
     for (let first = 0; first < blocks.length; first++) {
@@ -86,11 +89,23 @@ export function mergeTextBlocks(
       .filter(candidate => !hasCompetingBlock(candidate, blocks, image, config))
       .sort((a, b) => b.score - a.score)[0];
     if (!best) break;
+    const left = blocks[best.first].text;
+    const right = blocks[best.second].text;
     const merged = createTextBlock([...blocks[best.first].lines, ...blocks[best.second].lines]);
+    merges.push({ left, right, result: merged.text });
     blocks.splice(best.second, 1);
     blocks.splice(best.first, 1, merged);
   }
   blocks.sort((a, b) => a.y - b.y || a.x - b.x);
   const prefix = input[0]?.id.match(/^(.*?)-block-/)?.[1] ?? 'image';
-  return blocks.map((block, index) => ({ ...block, id: `${prefix}-block-${index + 1}` }));
+  return { blocks: blocks.map((block, index) => ({ ...block, id: `${prefix}-block-${index + 1}` })), merges };
+}
+
+export function mergeTextBlocks(
+  input: readonly TextBlock[],
+  imageWidth: number,
+  imageHeight: number,
+  config: MergeConfig = TEXT_BLOCK_MERGE_CONFIG,
+): TextBlock[] {
+  return mergeTextBlocksDetailed(input, imageWidth, imageHeight, config).blocks;
 }
