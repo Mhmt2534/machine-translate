@@ -2,3 +2,5 @@ node_modules/
 dist/
 .pnpm-store/
 .test-profile/
+.env
+dist-server/

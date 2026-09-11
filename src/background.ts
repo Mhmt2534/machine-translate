@@ -1,4 +1,5 @@
 import type { ImageRequest } from './image/types';
+import { postTranslationBatch } from './translation/httpClient';
 
 let creating: Promise<void> | undefined;
 let processing = false;
@@ -47,6 +48,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'OCR_HEARTBEAT' && sender.id === chrome.runtime.id && !sender.tab) {
     sendResponse({ ok: true });
     return;
+  }
+  if (message?.type === 'TRANSLATE_BATCH' && sender.id === chrome.runtime.id && sender.tab && sender.frameId === 0) {
+    void postTranslationBatch(message.request).then(sendResponse, (error: unknown) => {
+      sendResponse({ error: error instanceof Error ? error.message : 'Translation request failed.' });
+    });
+    return true;
   }
   if (message?.type !== 'OCR_IMAGE' || sender.id !== chrome.runtime.id || !sender.tab || sender.frameId !== 0) return;
   if (processing) {

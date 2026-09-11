@@ -1,6 +1,6 @@
-# Webtoon Translator — Adım 2.5: OCR metin gruplama
+# Webtoon Translator — Adım 3: Bağlamlı AI çeviri
 
-Chrome / Edge 116+ (Chromium) için Manifest V3 eklentisi. Ana sayfa DOM'undaki büyük `img` elementlerini bulur ve en fazla 3 yüklenmiş adayda Tesseract.js 7 ile İngilizce OCR çalıştırır. Çeviri, harici AI servisi ve backend içermez. Görselin gerçek dosyasını veya yazılarını değiştirmez.
+Chrome / Edge 116+ (Chromium) için Manifest V3 eklentisi. Büyük `img` elementlerini bulur, en fazla 3 adayda Tesseract.js 7 ile İngilizce OCR çalıştırır ve final metin bloklarını localhost'taki Node/TypeScript sunucusu üzerinden bağlamlı olarak Türkçeye çevirir. Görselin gerçek dosyasını ve üzerindeki yazıları değiştirmez.
 
 Gruplama single-linkage/connected-component kullanmaz. Her yeni OCR satırı, mevcut block'un tamamıyla karşılaştırılır; oluşacak bounding box, X merkez yayılımı, ortalama merkez uzaklığı, satır yüksekliği, dikey boşluk düzeni, metin yoğunluğu ve doğal image oranları limitleri aşarsa ayrı block olarak başlatılır. Son aşamada büyük iç dikey boşluklar bölünür ve geçersiz/çok büyük block'lar elenir.
 
@@ -17,6 +17,20 @@ Adım 2.5.2 final pass, aynı sütundaki dikey block merge toleransını doğal 
 5. Ham OCR satırları ince mavi, gruplanmış metin blokları kalın pembe kutularla gösterilir. Her metin bloğunda **BLOCK N** etiketi vardır. Kutular kaydırma/boyut değişiminde izlenir, yeniden Detect Text çalışınca temizlenir.
 6. Popup kapanabilir; işlemi tekrar açarak izleyebilirsiniz. Sayfa yenilenirse o sayfanın işlem takibi ve kutuları sıfırlanır.
 7. İş sonunda `try/finally` ile başlangıçtaki X/Y scroll konumuna dönülür. OCR sırasında sayfaya wheel/touch/scroll tuşu veya tıklama gibi manuel giriş gelirse çalışma güvenli bir kontrol noktasında kesilir ve konum geri yüklenir. Sayfa kilitlenmez; screenshot sırasında sekmeyi aktif tutun.
+
+## Translate Text kullanımı
+
+1. `.env.example` dosyasını `.env` adıyla kopyalayın ve `OPENAI_API_KEY` değerini yazın. İsterseniz `OPENAI_MODEL` değerini değiştirin. `.env` Git dışında tutulur ve build çıktısına kopyalanmaz.
+2. `npm run build` sonrasında ayrı bir PowerShell penceresinde `npm run server` çalıştırın. Sunucu yalnızca `127.0.0.1:4317` üzerinde dinler.
+3. Uzantıyı reload edip web sayfasını yenileyin. Sırasıyla **Scan Images**, **Detect Text**, ardından etkinleşen **Translate Text** düğmesine basın.
+4. Popup her batch için `Translating batch X / Y...` gösterir. Bittiğinde toplam block, translated, skipped ve error sayılarını verir.
+5. Sayfanın F12 Console bölümünde her sonuç `[Webtoon Translator] Translation` etiketiyle EN/TR olarak görünür. Pembe block işaretinin üzerine gelince aynı bilgi `title` içinde gösterilir. Görsel üzerine Türkçe metin çizilmez.
+
+Her candidate image ayrı bağlamdır. Block'lar üstten alta, yaklaşık aynı satırda soldan sağa sıralanır; bir batch en fazla 12 block veya 5000 kaynak karakter içerir. Model bütün batch'i bağlam olarak görür fakat her block ID için ayrı sonuç üretir. OpenAI Responses API structured output kullanılır. Prompt doğal günlük Türkçe, isim/ton/noktalama koruma, küçük OCR hatalarını bağlamdan düzeltme ve kurtarılamayan OCR için `unrecoverable-ocr` SKIP kurallarını içerir.
+
+Sunucu bilinmeyen ve duplicate ID'leri reddeder. Eksik ID veya boş çeviri yalnızca ilgili block'u error olarak işaretler. 429 ve 5xx yanıtları en fazla iki kez 500/1000 ms gecikmeyle yeniden denenir. Normalize edilmiş aynı block dizisi, model ve sıra için işlem belleğinde cache tutulur; sunucu kapanınca cache silinir. API anahtarı yalnızca sunucu sürecindeki `.env` dosyasından okunur ve loglanmaz.
+
+Beklenen hata mesajları API key eksikliği, kapalı localhost sunucusu, provider 401/429, timeout, network ve bozuk structured response durumlarını birbirinden ayırır. Sağlık kontrolü `GET http://127.0.0.1:4317/health` adresindedir. CORS yalnızca Chrome/Edge uzantı origin'leri ile localhost geliştirme origin'lerine izin verir.
 
 ### Otomatik scroll ve segmentler
 
@@ -74,7 +88,7 @@ Web sayfasının F12 → Console bölümünde:
 
 - `manifest.json`: Eklenti bilgileri, otomatik content script ve popup tanımı.
 - `src/content.ts`: İlk tarama, MutationObserver, yüklemeyi bekleyen manuel tarama ve geçici aday işaretleri.
-- `src/popup.ts`: Aktif sekmeyi taratır; aday sayısını, bekleyen görselleri ve hataları popup'ta gösterir.
+- `src/popup.ts`: Tarama, OCR ve çeviri durumunu izler; Translate Text düğmesini OCR hazır olduğunda etkinleştirir.
 - `src/popup.html`: Başlık, Scan Images butonu ve sonuç alanı.
 - `src/popup.css`: Basit popup stili.
 - `tsconfig.json`: TypeScript derleyici ayarları.
@@ -101,9 +115,17 @@ Web sayfasının F12 → Console bölümünde:
 - `src/ocr/contentOcr.ts`: İlk 3 adayın sıralı OCR, filtreleme ve gruplama akışı; durum ve console logları.
 - `src/ocr/types.ts`: Koordinat tipleri ve performans sınırları.
 - `src/ocr/overlay.ts`: Mavi OCR bölgeleri, pembe TextBlock kutuları ve ekran koordinatı dönüşümü.
+- `src/translation/`: Okuma sırası, image bazlı batching, localhost HTTP istemcisi, yanıt doğrulaması ve content-script çeviri durumu.
+- `server/translationServer.ts`: Yalnızca localhost'a bağlanan minimal Node HTTP endpoint'i.
+- `server/translation/types.ts`: Sağlayıcıdan bağımsız `TranslationProvider` sözleşmesi.
+- `server/translation/openAIProvider.ts`: OpenAI Responses API structured-output sağlayıcısı, timeout ve sınırlı retry.
+- `server/translation/translationService.ts`: İstek doğrulama, ID güvenliği ve session içi cache.
+- `.env.example`: Secret içermeyen yerel yapılandırma örneği; gerçek `.env` Git'e alınmaz.
 - `tests/textGrouping.test.mjs`: Filtreleme, okuma sırası, balon ayrımı, tire/noktalama ve candidate yalıtımı testleri.
 - `tests/textBlockCleanup.test.mjs`: Kısa garbage temizliği, punctuation koruması ve kontrollü block merge testleri.
-- `tests/ocr-smoke.cjs`: Gerçek MV3/Edge OCR entegrasyon testi.
+- `tests/translation.test.mjs`: Provider, doğrulama, retry, malformed response, batching ve cache birim testleri.
+- `tests/translation-server-smoke.cjs`: Localhost binding, CORS ve API key eksikliği entegrasyon testi.
+- `tests/ocr-smoke.cjs`: Gerçek MV3/Edge OCR ve popup çeviri entegrasyon testi.
 
 ## Build (Windows 11 / PowerShell)
 
@@ -116,8 +138,18 @@ npm run build
 
 Alternatif olarak pnpm ile `pnpm install --frozen-lockfile` ve `pnpm run build` kullanılabilir.
 
-Çıktı `dist/`: Manifest, content/popup/background/offscreen dosyaları ve `vendor/` OCR kaynakları. Tarayıcıya **dist klasörünün tamamını** yükleyin.
+Çıktı `dist/`: Manifest, content/popup/background/offscreen dosyaları ve `vendor/` OCR kaynakları. `dist-server/translationServer.mjs` yerel backend çıktısıdır. Tarayıcıya **dist klasörünün tamamını** yükleyin.
 Yalnızca tip kontrolü: `npm run typecheck`.
+
+Yerel sunucuyu başlatma:
+
+```powershell
+Copy-Item .env.example .env
+# .env içindeki OPENAI_API_KEY değerini düzenleyin
+npm run server
+```
+
+Testler: `npm run test:unit`; backend smoke için build sonrasında `node tests/translation-server-smoke.cjs`; Edge/MV3 uçtan uca test için Playwright kurulu ortamda `node tests/ocr-smoke.cjs`.
 
 ## Tarayıcıya yükleme
 

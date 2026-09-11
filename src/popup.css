@@ -13,7 +13,13 @@ button {
   cursor: pointer;
 }
 
-#ocr-result {
+#ocr-result,
+#translation-result {
   white-space: pre-line;
   overflow-wrap: anywhere;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
 }

@@ -1,4 +1,5 @@
 import type { OcrStatus } from './ocr/types';
+import type { TranslationStatus } from './translation/types';
 
 (() => {
   const button = document.querySelector<HTMLButtonElement>('#scan-images');
@@ -30,26 +31,45 @@ import type { OcrStatus } from './ocr/types';
 
   const detect = document.querySelector<HTMLButtonElement>('#detect-text');
   const ocrResult = document.querySelector<HTMLParagraphElement>('#ocr-result');
-  if (!detect || !ocrResult) return;
+  const translate = document.querySelector<HTMLButtonElement>('#translate-text');
+  const translationResult = document.querySelector<HTMLParagraphElement>('#translation-result');
+  if (!detect || !ocrResult || !translate || !translationResult) return;
   let tabId: number | undefined;
   let polling = false;
   let starting = false;
+  let translating = false;
   let generation = 0;
+  let latestOcr: OcrStatus | undefined;
+  let latestTranslation: TranslationStatus | undefined;
+  const updateControls = () => {
+    detect.disabled = Boolean(latestOcr?.running || latestTranslation?.running || starting);
+    translate.disabled = Boolean(!latestTranslation?.ready || latestTranslation.running || latestOcr?.running || translating);
+  };
   const render = (status: OcrStatus) => {
-    detect.disabled = status.running;
+    latestOcr = status;
     ocrResult.textContent = [status.message, ...status.errors].join('\n');
+    updateControls();
+  };
+  const renderTranslation = (status: TranslationStatus) => {
+    latestTranslation = status;
+    translationResult.textContent = status.message;
+    updateControls();
   };
   const poll = async () => {
     if (polling || starting || tabId === undefined) return;
     polling = true;
     const requestGeneration = generation;
     try {
-      const status = await chrome.tabs.sendMessage(tabId, { type: 'GET_OCR_STATUS' }, { frameId: 0 });
-      if (requestGeneration === generation) render(status);
+      const [ocrStatus, translationStatus] = await Promise.all([
+        chrome.tabs.sendMessage(tabId, { type: 'GET_OCR_STATUS' }, { frameId: 0 }),
+        chrome.tabs.sendMessage(tabId, { type: 'GET_TRANSLATION_STATUS' }, { frameId: 0 }),
+      ]);
+      if (requestGeneration === generation) { render(ocrStatus); renderTranslation(translationStatus); }
     } catch {
       if (requestGeneration === generation) {
         ocrResult.textContent = 'OCR bağlantısı yok. Web sayfasını yenileyin.';
         detect.disabled = false;
+        translate.disabled = true;
       }
     } finally { polling = false; }
   };
@@ -69,6 +89,18 @@ import type { OcrStatus } from './ocr/types';
       ocrResult.textContent = 'OCR başlatılamadı. Web sayfasını yenileyin.';
       detect.disabled = false;
     } finally { starting = false; }
+  });
+  translate.addEventListener('click', async () => {
+    if (tabId === undefined || !latestTranslation?.ready) return;
+    generation++;
+    translating = true;
+    updateControls();
+    translationResult.textContent = 'Starting translation…';
+    try {
+      renderTranslation(await chrome.tabs.sendMessage(tabId, { type: 'START_TRANSLATION' }, { frameId: 0 }));
+    } catch {
+      translationResult.textContent = 'Translation failed:\nWeb page connection is unavailable.';
+    } finally { translating = false; updateControls(); }
   });
   window.setInterval(() => { void poll(); }, 750);
 })();

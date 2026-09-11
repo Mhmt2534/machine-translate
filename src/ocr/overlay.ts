@@ -1,4 +1,5 @@
 import type { DetectedText, TextBlock } from './types';
+import type { TranslatedTextBlock } from '../translation/types';
 
 interface OverlayRect { x: number; y: number; width: number; height: number }
 
@@ -9,6 +10,7 @@ export function createOcrOverlay() {
   const shadow = host.attachShadow({ mode: 'closed' });
   document.documentElement.append(host);
   const entries: { img: HTMLImageElement; source: string; layer: HTMLDivElement; boxes: { rect: OverlayRect; box: HTMLDivElement }[] }[] = [];
+  const blockMarkers = new Map<string, { box: HTMLDivElement; label: HTMLSpanElement; original: string }>();
   let index = 0;
   let frame = 0;
   function update() {
@@ -82,6 +84,7 @@ export function createOcrOverlay() {
         box.append(label);
         layer.append(box);
         boxes.push({ rect: block, box });
+        blockMarkers.set(block.id, { box, label, original: block.text });
       }
       for (const block of rejectedBlocks) {
         const box = document.createElement('div');
@@ -97,6 +100,17 @@ export function createOcrOverlay() {
       shadow.append(layer);
       entries.push({ img, source, layer, boxes });
     },
-    clear() { cancelAnimationFrame(frame); host.remove(); },
+    setTranslations(translations: readonly TranslatedTextBlock[]) {
+      for (const translation of translations) {
+        const marker = blockMarkers.get(translation.id);
+        if (!marker) continue;
+        const detail = translation.skipped
+          ? `EN: ${marker.original}\nSKIP: ${translation.skipReason || 'unspecified'}`
+          : `EN: ${marker.original}\nTR: ${translation.translatedText}`;
+        marker.box.title = detail;
+        marker.label.title = detail;
+      }
+    },
+    clear() { cancelAnimationFrame(frame); blockMarkers.clear(); host.remove(); },
   };
 }

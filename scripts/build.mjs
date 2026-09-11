@@ -8,6 +8,10 @@ await build({
   entryPoints: ['src/content.ts', 'src/popup.ts', 'src/background.ts', 'src/offscreen.ts'],
   outdir: 'dist', bundle: true, format: 'iife', platform: 'browser', target: 'chrome116',
 });
+await build({
+  entryPoints: ['server/translationServer.ts'],
+  outfile: 'dist-server/translationServer.mjs', bundle: true, format: 'esm', platform: 'node', target: 'node20',
+});
 await import('./copy-static.mjs');
 await copyFile('src/offscreen.html', 'dist/offscreen.html');
 await mkdir('dist/vendor/lang', { recursive: true });

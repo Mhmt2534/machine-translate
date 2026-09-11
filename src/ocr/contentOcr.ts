@@ -8,18 +8,23 @@ import { groupTextRegionsDetailed } from './textGrouping';
 import { validateTextBlocks } from './textBlockValidation';
 import { mergeTextBlocksDetailed } from './textBlockMerge';
 import { validateFinalTextBlocks } from './textSanity';
+import { installTranslation } from '../translation/contentTranslation';
+import type { TranslationImageInput } from '../translation/types';
 
 export function installOcr(getCandidates: () => HTMLImageElement[]) {
   let status: OcrStatus = { running: false, message: `Ready — first ${MAX_OCR_IMAGES} candidates; automatic scroll`,
     regions: 0, filteredRegions: 0, initialTextBlocks: 0, textBlocks: 0, errors: [] };
   let overlay: ReturnType<typeof createOcrOverlay> | undefined;
+  const translation = installTranslation(results => overlay?.setTranslations(results));
 
   async function run() {
     overlay?.clear();
     overlay = createOcrOverlay();
+    translation.setInput([]);
     const images = getCandidates().slice(0, MAX_OCR_IMAGES);
     const session = startScrollSession(images);
     let processed = 0;
+    const translationImages: TranslationImageInput[] = [];
     const failedAcquisitions = new Set<string>();
     status = { running: true, message: 'OCR processing — page will scroll automatically.',
       regions: 0, filteredRegions: 0, initialTextBlocks: 0, textBlocks: 0, errors: [] };
@@ -123,6 +128,7 @@ export function installOcr(getCandidates: () => HTMLImageElement[]) {
           status.filteredRegions += filtered.regions.length;
           status.initialTextBlocks += grouping.blocks.length;
           status.textBlocks += blocks.length;
+          translationImages.push({ imageId: `image-${index + 1}`, blocks });
           processed++;
         } catch (error) {
           const detail = `Image ${index + 1}: ${error instanceof Error ? error.message : String(error)}`;
@@ -134,6 +140,7 @@ export function installOcr(getCandidates: () => HTMLImageElement[]) {
       await session.restore();
       status.running = false;
       status.message = `${session.signal.aborted ? 'OCR interrupted' : status.errors.length ? 'OCR finished with errors' : 'OCR complete'}\nImages processed: ${processed} / ${images.length}\nErrors: ${status.errors.length}\nOCR regions: ${status.regions}\nFiltered regions: ${status.filteredRegions}\nInitial text blocks: ${status.initialTextBlocks}\nFinal text blocks: ${status.textBlocks}`;
+      translation.setInput(session.signal.aborted ? [] : translationImages);
       if (!images.length) status.message += '\nNo candidate images. Önce Scan Images çalıştırın.';
     }
   }
