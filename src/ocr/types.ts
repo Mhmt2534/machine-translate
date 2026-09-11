@@ -18,6 +18,11 @@ export interface TextBlock {
   lines: DetectedText[];
 }
 
+export interface ImageDimensions {
+  width: number;
+  height: number;
+}
+
 export interface OcrResult {
   regions: DetectedText[];
   width: number;
@@ -29,6 +34,7 @@ export interface OcrStatus {
   message: string;
   regions: number;
   filteredRegions: number;
+  initialTextBlocks: number;
   textBlocks: number;
   errors: string[];
 }

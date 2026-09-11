@@ -47,7 +47,8 @@ export function createOcrOverlay() {
   }
   update();
   return {
-    add(img: HTMLImageElement, source: string, regions: DetectedText[], blocks: TextBlock[]) {
+    add(img: HTMLImageElement, source: string, regions: DetectedText[], blocks: TextBlock[],
+      rejected: DetectedText[] = [], rejectedBlocks: TextBlock[] = []) {
       const layer = document.createElement('div');
       layer.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;';
       const boxes: { rect: OverlayRect; box: HTMLDivElement }[] = regions.map(region => {
@@ -60,6 +61,16 @@ export function createOcrOverlay() {
         layer.append(box);
         return { rect: region, box };
       });
+      for (const region of rejected) {
+        const box = document.createElement('div');
+        box.style.cssText = 'position:absolute;box-sizing:border-box;border:2px dashed #ff9f1c;background:rgba(255,159,28,.08);';
+        const label = document.createElement('span');
+        label.textContent = 'REJECTED OCR';
+        label.style.cssText = 'position:absolute;left:0;top:0;background:#7a4300;color:white;font:bold 10px/1.2 sans-serif;white-space:nowrap;';
+        box.append(label);
+        layer.append(box);
+        boxes.push({ rect: region, box });
+      }
       for (const [blockIndex, block] of blocks.entries()) {
         const box = document.createElement('div');
         box.style.cssText = 'position:absolute;box-sizing:border-box;border:4px solid #ff2d8d;background:rgba(255,45,141,.05);';
@@ -68,6 +79,17 @@ export function createOcrOverlay() {
         label.textContent = `BLOCK ${blockIndex + 1}`;
         label.title = block.text;
         label.style.cssText = 'position:absolute;left:0;top:0;background:#a0004d;color:white;font:bold 12px/1.3 sans-serif;padding:2px 4px;white-space:nowrap;';
+        box.append(label);
+        layer.append(box);
+        boxes.push({ rect: block, box });
+      }
+      for (const block of rejectedBlocks) {
+        const box = document.createElement('div');
+        box.style.cssText = 'position:absolute;box-sizing:border-box;border:3px dashed #ff9f1c;background:rgba(255,159,28,.05);';
+        const label = document.createElement('span');
+        label.textContent = 'REJECTED BLOCK';
+        label.title = block.text;
+        label.style.cssText = 'position:absolute;left:0;top:0;background:#7a4300;color:white;font:bold 10px/1.2 sans-serif;white-space:nowrap;';
         box.append(label);
         layer.append(box);
         boxes.push({ rect: block, box });

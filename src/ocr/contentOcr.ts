@@ -4,11 +4,13 @@ import { acquireAndRecognize } from '../image/contentAcquisition';
 import { checkInterrupted, startScrollSession, waitForStableImage } from '../image/autoScroll';
 import { OCR_FILTER_CONFIG } from './config';
 import { filterTextRegions } from './textFiltering';
-import { groupTextRegions } from './textGrouping';
+import { groupTextRegionsDetailed } from './textGrouping';
+import { validateTextBlocks } from './textBlockValidation';
+import { mergeTextBlocks } from './textBlockMerge';
 
 export function installOcr(getCandidates: () => HTMLImageElement[]) {
   let status: OcrStatus = { running: false, message: `Ready — first ${MAX_OCR_IMAGES} candidates; automatic scroll`,
-    regions: 0, filteredRegions: 0, textBlocks: 0, errors: [] };
+    regions: 0, filteredRegions: 0, initialTextBlocks: 0, textBlocks: 0, errors: [] };
   let overlay: ReturnType<typeof createOcrOverlay> | undefined;
 
   async function run() {
@@ -19,7 +21,7 @@ export function installOcr(getCandidates: () => HTMLImageElement[]) {
     let processed = 0;
     const failedAcquisitions = new Set<string>();
     status = { running: true, message: 'OCR processing — page will scroll automatically.',
-      regions: 0, filteredRegions: 0, textBlocks: 0, errors: [] };
+      regions: 0, filteredRegions: 0, initialTextBlocks: 0, textBlocks: 0, errors: [] };
     try {
       for (const [index, img] of images.entries()) {
         if (session.signal.aborted) break;
@@ -63,27 +65,49 @@ export function installOcr(getCandidates: () => HTMLImageElement[]) {
           }
           const regions = response.regions;
           for (const region of regions) console.log('[Webtoon Translator] OCR text', region);
-          const filtered = filterTextRegions(regions);
+          const imageDimensions = { width: naturalWidth, height: naturalHeight };
+          const filtered = filterTextRegions(regions, imageDimensions);
           if (OCR_FILTER_CONFIG.debug) {
             for (const rejected of filtered.rejected) {
               console.debug('[Webtoon Translator] OCR region filtered', rejected);
             }
           }
-          const blocks = groupTextRegions(filtered.regions, `image-${index + 1}`);
+          const grouping = groupTextRegionsDetailed(filtered.regions, `image-${index + 1}`, imageDimensions);
+          const validation = validateTextBlocks(grouping.blocks, imageDimensions);
+          const blocks = mergeTextBlocks(validation.blocks, naturalWidth, naturalHeight);
           for (const block of blocks) {
             console.log('[Webtoon Translator] Text block', {
               id: block.id, text: block.text, confidence: Math.round(block.confidence * 10) / 10,
               x: block.x, y: block.y, width: block.width, height: block.height, lineCount: block.lines.length,
+              widthRatio: block.width / naturalWidth, heightRatio: block.height / naturalHeight,
+            });
+          }
+          for (const rejected of grouping.rejected) {
+            console.debug('[Webtoon Translator] Text block rejected', {
+              id: rejected.block.id, text: rejected.block.text, lineCount: rejected.block.lines.length,
+              reason: rejected.reason, ...rejected.metrics,
+            });
+          }
+          for (const rejected of validation.rejected) {
+            console.debug('[Webtoon Translator] Text block rejected', {
+              id: rejected.block.id, text: rejected.block.text, lineCount: rejected.block.lines.length,
+              confidence: Math.round(rejected.block.confidence * 10) / 10,
+              reason: rejected.reason, ...rejected.details,
             });
           }
           console.log('[Webtoon Translator] Text grouping complete', {
-            image: index + 1, rawRegions: regions.length, filteredRegions: filtered.regions.length, textBlocks: blocks.length,
+            image: index + 1, rawRegions: regions.length, filteredRegions: filtered.regions.length,
+            initialTextBlocks: grouping.blocks.length, finalTextBlocks: blocks.length,
+            rejectedTextBlocks: grouping.rejected.length + validation.rejected.length,
           });
           console.log('[Webtoon Translator] OCR completed for image', { src: source, method: response.method,
             image: index + 1, regions: regions.length, naturalWidth, naturalHeight, segments: response.segments || 1 });
-          overlay.add(img, source, regions, blocks);
+          overlay.add(img, source, filtered.regions, blocks,
+            OCR_FILTER_CONFIG.debug ? filtered.rejected.map(item => item.region) : [],
+            OCR_FILTER_CONFIG.debug ? [...grouping.rejected.map(item => item.block), ...validation.rejected.map(item => item.block)] : []);
           status.regions += regions.length;
           status.filteredRegions += filtered.regions.length;
+          status.initialTextBlocks += grouping.blocks.length;
           status.textBlocks += blocks.length;
           processed++;
         } catch (error) {
@@ -95,7 +119,7 @@ export function installOcr(getCandidates: () => HTMLImageElement[]) {
     } finally {
       await session.restore();
       status.running = false;
-      status.message = `${session.signal.aborted ? 'OCR interrupted' : status.errors.length ? 'OCR finished with errors' : 'OCR complete'}\nImages processed: ${processed} / ${images.length}\nErrors: ${status.errors.length}\nOCR regions: ${status.regions}\nText blocks: ${status.textBlocks}`;
+      status.message = `${session.signal.aborted ? 'OCR interrupted' : status.errors.length ? 'OCR finished with errors' : 'OCR complete'}\nImages processed: ${processed} / ${images.length}\nErrors: ${status.errors.length}\nOCR regions: ${status.regions}\nFiltered regions: ${status.filteredRegions}\nInitial text blocks: ${status.initialTextBlocks}\nFinal text blocks: ${status.textBlocks}`;
       if (!images.length) status.message += '\nNo candidate images. Önce Scan Images çalıştırın.';
     }
   }

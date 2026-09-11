@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Webtoon Translator",
-  "version": "0.2.2",
+  "version": "0.2.4",
   "minimum_chrome_version": "116",
   "description": "Webtoon görsellerinde yerel İngilizce OCR ve koordinat doğrulaması.",
   "permissions": ["offscreen", "activeTab"],

@@ -2,12 +2,16 @@
 
 Chrome / Edge 116+ (Chromium) için Manifest V3 eklentisi. Ana sayfa DOM'undaki büyük `img` elementlerini bulur ve en fazla 3 yüklenmiş adayda Tesseract.js 7 ile İngilizce OCR çalıştırır. Çeviri, harici AI servisi ve backend içermez. Görselin gerçek dosyasını veya yazılarını değiştirmez.
 
+Gruplama single-linkage/connected-component kullanmaz. Her yeni OCR satırı, mevcut block'un tamamıyla karşılaştırılır; oluşacak bounding box, X merkez yayılımı, ortalama merkez uzaklığı, satır yüksekliği, dikey boşluk düzeni, metin yoğunluğu ve doğal image oranları limitleri aşarsa ayrı block olarak başlatılır. Son aşamada büyük iç dikey boşluklar bölünür ve geçersiz/çok büyük block'lar elenir.
+
+Adım 2.5.1'de ilk geometric block'lar ayrıca metin uzunluğu, alfasayısal/symbol oranı, kısa metne göre confidence, child confidence ve yakın anlamlı block bağlamıyla doğrulanır. Ardından yalnızca aynı sütundaki dikey komşular `mergeTextBlocks` ile birleştirilir; aynı yakınlıktaki rakip üçüncü block varsa merge yapılmaz. Popup ilk ve final block sayılarını ayrı gösterir.
+
 ## Detect Text kullanımı
 
 1. Build alın, tarayıcıda eklentiyi reload edin ve web sayfasını yenileyin. Popup'ı webtoon sekmesindeyken **araç çubuğundaki eklenti simgesine tıklayarak** açın. Bu, ekran yakalama için gereken geçici `activeTab` iznini verir.
 2. Sayfayı kaydırarak görselleri yükleyin; **Scan Images** ile adayları kontrol edin.
 3. **Detect Text** düğmesine bir kez basın. Başlangıçta DOM sırasındaki ilk N candidate alınır; görünür olma filtresi yoktur. Varsayılan N=3, `src/ocr/config.ts` içinden değişir. Orijinal piksel/fetch yolları çalışıyorsa gereksiz scroll yapılmaz; viewport fallback tüm candidate'ı otomatik kaydırarak işler.
-4. Popup `Processing image 1 / 3`, `Capture 1 / 2` ve otomatik scroll bilgisini gösterir. Sonunda `Images processed: 3 / 3`, `Errors: 0`, `OCR regions: N`, `Text blocks: N` özeti görünür. Bir candidate hata verirse sonraki işlenir.
+4. Popup `Processing image 1 / 3`, `Capture 1 / 2` ve otomatik scroll bilgisini gösterir. Sonunda `Images processed: 3 / 3`, `Errors: 0`, `OCR regions: N`, `Filtered regions: N`, `Initial text blocks: N`, `Final text blocks: N` özeti görünür. Bir candidate hata verirse sonraki işlenir.
 5. Ham OCR satırları ince mavi, gruplanmış metin blokları kalın pembe kutularla gösterilir. Her metin bloğunda **BLOCK N** etiketi vardır. Kutular kaydırma/boyut değişiminde izlenir, yeniden Detect Text çalışınca temizlenir.
 6. Popup kapanabilir; işlemi tekrar açarak izleyebilirsiniz. Sayfa yenilenirse o sayfanın işlem takibi ve kutuları sıfırlanır.
 7. İş sonunda `try/finally` ile başlangıçtaki X/Y scroll konumuna dönülür. OCR sırasında sayfaya wheel/touch/scroll tuşu veya tıklama gibi manuel giriş gelirse çalışma güvenli bir kontrol noktasında kesilir ve konum geri yüklenir. Sayfa kilitlenmez; screenshot sırasında sekmeyi aktif tutun.
@@ -89,10 +93,13 @@ Web sayfasının F12 → Console bölümünde:
 - `src/ocr/config.ts`, `deduplicate.ts`: Ortak capture, filtreleme ve gruplama eşikleri ile overlap tekrar temizliği.
 - `src/ocr/textFiltering.ts`: Saf, muhafazakâr OCR gürültü filtresi ve ret nedenleri.
 - `src/ocr/textGrouping.ts`: Saf geometrik gruplama, okuma sırası, metin birleştirme ve block confidence hesabı.
+- `src/ocr/textBlockValidation.ts`: Uzunluk ve bağlama duyarlı block kalite doğrulaması.
+- `src/ocr/textBlockMerge.ts`: Dikey komşuluk ve competing-block kontrollü final block birleştirmesi.
 - `src/ocr/contentOcr.ts`: İlk 3 adayın sıralı OCR, filtreleme ve gruplama akışı; durum ve console logları.
 - `src/ocr/types.ts`: Koordinat tipleri ve performans sınırları.
 - `src/ocr/overlay.ts`: Mavi OCR bölgeleri, pembe TextBlock kutuları ve ekran koordinatı dönüşümü.
 - `tests/textGrouping.test.mjs`: Filtreleme, okuma sırası, balon ayrımı, tire/noktalama ve candidate yalıtımı testleri.
+- `tests/textBlockCleanup.test.mjs`: Kısa garbage temizliği, punctuation koruması ve kontrollü block merge testleri.
 - `tests/ocr-smoke.cjs`: Gerçek MV3/Edge OCR entegrasyon testi.
 
 ## Build (Windows 11 / PowerShell)
