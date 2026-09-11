@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Webtoon Translator",
+  "version": "0.2.1",
+  "minimum_chrome_version": "116",
+  "description": "Webtoon görsellerinde yerel İngilizce OCR ve koordinat doğrulaması.",
+  "permissions": ["offscreen", "activeTab"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": { "service_worker": "background.js" },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

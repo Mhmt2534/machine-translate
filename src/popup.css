@@ -1,0 +1,19 @@
+body {
+  min-width: 220px;
+  padding: 12px;
+  font-family: system-ui, sans-serif;
+}
+
+h1 {
+  font-size: 18px;
+}
+
+button {
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+#ocr-result {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}

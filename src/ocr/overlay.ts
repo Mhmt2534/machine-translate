@@ -1,0 +1,66 @@
+import type { DetectedText } from './types';
+
+export function createOcrOverlay() {
+  const host = document.createElement('div');
+  host.dataset.wtOcrOverlay = '';
+  host.style.cssText = 'all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
+  const shadow = host.attachShadow({ mode: 'closed' });
+  document.documentElement.append(host);
+  const entries: { img: HTMLImageElement; source: string; layer: HTMLDivElement; boxes: { region: DetectedText; box: HTMLDivElement }[] }[] = [];
+  let index = 0;
+  let frame = 0;
+  function update() {
+    for (const { img, source, layer, boxes } of entries) {
+      const rect = img.getBoundingClientRect();
+      layer.hidden = !img.isConnected || (img.currentSrc || img.src) !== source || !rect.width || !rect.height;
+      if (layer.hidden) continue;
+      const style = getComputedStyle(img);
+      const zoomX = rect.width / (img.offsetWidth || rect.width);
+      const zoomY = rect.height / (img.offsetHeight || rect.height);
+      const left = (parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft)) * zoomX;
+      const top = (parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop)) * zoomY;
+      const width = rect.width - left - (parseFloat(style.borderRightWidth) + parseFloat(style.paddingRight)) * zoomX;
+      const height = rect.height - top - (parseFloat(style.borderBottomWidth) + parseFloat(style.paddingBottom)) * zoomY;
+      let sx = width / img.naturalWidth;
+      let sy = height / img.naturalHeight;
+      if (style.objectFit !== 'fill') {
+        const contain = Math.min(sx, sy);
+        const scale = style.objectFit === 'cover' ? Math.max(sx, sy) :
+          style.objectFit === 'none' ? 1 : style.objectFit === 'scale-down' ? Math.min(1, contain) : contain;
+        sx = sy = scale;
+      }
+      const position = style.objectPosition.split(' ');
+      const offset = (value: string, space: number) => value.endsWith('%') ? parseFloat(value) / 100 * space : parseFloat(value) || 0;
+      const dx = offset(position[0], width - img.naturalWidth * sx);
+      const dy = offset(position[1] || '50%', height - img.naturalHeight * sy);
+      Object.assign(layer.style, { left: `${rect.left + left}px`, top: `${rect.top + top}px`, width: `${width}px`, height: `${height}px` });
+      for (const { region, box } of boxes) {
+        Object.assign(box.style, {
+          left: `${dx + region.x * sx}px`, top: `${dy + region.y * sy}px`,
+          width: `${region.width * sx}px`, height: `${region.height * sy}px`,
+        });
+      }
+    }
+    frame = requestAnimationFrame(update);
+  }
+  update();
+  return {
+    add(img: HTMLImageElement, source: string, regions: DetectedText[]) {
+      const layer = document.createElement('div');
+      layer.style.cssText = 'position:absolute;overflow:hidden;pointer-events:none;';
+      const boxes = regions.map(region => {
+        const box = document.createElement('div');
+        box.style.cssText = 'position:absolute;box-sizing:border-box;border:2px solid #00bfff;background:rgba(0,191,255,.12);';
+        const label = document.createElement('span');
+        label.textContent = `OCR ${++index}`;
+        label.style.cssText = 'position:absolute;left:0;top:0;background:#003d66;color:white;font:bold 11px/1.2 sans-serif;white-space:nowrap;';
+        box.append(label);
+        layer.append(box);
+        return { region, box };
+      });
+      shadow.append(layer);
+      entries.push({ img, source, layer, boxes });
+    },
+    clear() { cancelAnimationFrame(frame); host.remove(); },
+  };
+}
